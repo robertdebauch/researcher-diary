@@ -6,6 +6,8 @@ function Archive({
   onDeleteExpedition,
   onHardReset,
   onOpenSummary,
+  onExport,
+  onImport,
 }) {
   return (
     <div className="list-view-container">
@@ -179,6 +181,54 @@ function Archive({
             );
           })
         )}
+      </div>
+
+      <div
+        style={{
+          display: "flex",
+          gap: "10px",
+          marginTop: "20px",
+          marginBottom: "20px",
+        }}
+      >
+        <button
+          onClick={onExport}
+          style={{
+            flex: 1,
+            padding: "10px",
+            backgroundColor: "white",
+            border: "1px solid #ddd",
+            borderRadius: "10px",
+            cursor: "pointer",
+            fontSize: "0.8rem",
+            color: "#666",
+          }}
+        >
+          💾 Экспорт (JSON)
+        </button>
+
+        <label
+          style={{
+            flex: 1,
+            padding: "10px",
+            backgroundColor: "white",
+            border: "1px solid #ddd",
+            borderRadius: "10px",
+            cursor: "pointer",
+            fontSize: "0.8rem",
+            color: "#666",
+            textAlign: "center",
+            display: "block",
+          }}
+        >
+          📥 Импорт (JSON)
+          <input
+            type="file"
+            accept=".json"
+            onChange={onImport}
+            style={{ display: "none" }}
+          />
+        </label>
       </div>
       {expeditions.length > 0 && (
         <button

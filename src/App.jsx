@@ -8,7 +8,7 @@ import SummaryView from "./components/SummaryView";
 import "./App.css";
 import { useState, useEffect, useCallback } from "react";
 import "leaflet/dist/leaflet.css";
-import { db, clearAllData } from "./db";
+import { db, clearAllData, exportAllData, importAllData } from "./db";
 
 function App() {
   const [position, setPosition] = useState(null);
@@ -251,6 +251,48 @@ function App() {
     }
   };
 
+  const handleExport = async () => {
+    try {
+      const data = await exportAllData();
+      const jsonString = JSON.stringify(data, null, 2);
+      const blob = new Blob([jsonString], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `explorer_backup_${new Date().toISOString().slice(0, 10)}.json`; // это хорошо?
+      link.click();
+
+      URL.revokeObjectURL(url);
+      alert("Бэкап успешно создан");
+    } catch (error) {
+      console.error("Ошибка при экспорте!", error);
+      alert("Не удалось экспортировать данные");
+    }
+  };
+
+  const handleImport = (event) => {
+    const file = event.target.files[0];
+    if (!file) {
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const json = JSON.parse(e.target.result);
+        await importAllData(json);
+
+        alert("Данные успешно восстановлены! Сейчас страница обновится");
+        window.location.reload();
+      } catch (error) {
+        console.error("Ошибка при импорте:", error);
+        alert("Ошибка: файл поврежден или имеет неверный формат");
+      }
+    };
+    reader.readAsText(file);
+  };
+
   useEffect(() => {
     if (route.length === 0 || !currentExpeditionId) {
       return;
@@ -299,6 +341,8 @@ function App() {
           onDeleteExpedition={deleteExpedition}
           onHardReset={handleHardReset}
           onOpenSummary={openSummary}
+          onExport={handleExport}
+          onImport={handleImport}
         />
       ) : view === "summary" ? (
         <SummaryView
