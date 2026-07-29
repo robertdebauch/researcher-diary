@@ -15,7 +15,6 @@ function RecenterMap({ position, route }) {
   useEffect(() => {
     if (route && route.length > 0) {
       const bounds = L.polyline(route).getBounds();
-
       map.fitBounds(bounds, { padding: [20, 20] });
     } else if (position) {
       map.setView(position);
@@ -38,6 +37,7 @@ function MapView({
 }) {
   return (
     <>
+      {/* Кнопка возврата в архив */}
       <button
         onClick={goBackToArchive}
         style={{
@@ -55,6 +55,8 @@ function MapView({
       >
         В архив
       </button>
+
+      {/* Панель управления сверху */}
       <div
         style={{
           position: "absolute",
@@ -163,42 +165,63 @@ function MapView({
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           />
+
+          {/* Маркер текущей позиции пользователя */}
           <Marker position={position}>
             <Popup>Вы здесь!</Popup>
           </Marker>
-          {findings.map((finding) => (
-            <Marker key={finding.id} position={finding.position}>
-              <Popup>
-                <div style={{ textAlign: "center", maxWidth: "200px" }}>
-                  {/* Если есть фото, показываем его сверху */}
-                  {finding.image && (
-                    <img
-                      src={finding.image}
-                      alt="Находка"
-                      style={{
-                        width: "100%",
-                        borderRadius: "8px",
-                        marginBottom: "8px",
-                        display: "block",
-                      }}
-                    />
-                  )}
 
-                  <strong style={{ display: "block", marginBottom: "4px" }}>
-                    {finding.isGoal ? "🎯 Цель найдена!" : "Находка!"}
-                  </strong>
+          {/* Отрисовка находок с кастомными иконками */}
+          {findings.map((finding) => {
+            // 1. Создаем иконку
+            const customIcon = L.divIcon({
+              className: "custom-marker-icon",
+              html: finding.image
+                ? `<img src="${finding.image}" class="custom-marker-img" />`
+                : `<div class="custom-marker-placeholder">📍</div>`,
+              iconSize: [40, 40],
+              iconAnchor: [20, 20],
+            });
 
-                  <div style={{ fontSize: "0.9rem", marginBottom: "8px" }}>
-                    {finding.note}
+            // 2. Возвращаем маркер с этой иконкой
+            return (
+              <Marker
+                key={finding.id}
+                position={finding.position}
+                icon={customIcon}
+              >
+                <Popup>
+                  <div style={{ textAlign: "center", maxWidth: "200px" }}>
+                    {finding.image && (
+                      <img
+                        src={finding.image}
+                        alt="Находка"
+                        style={{
+                          width: "100%",
+                          borderRadius: "8px",
+                          marginBottom: "8px",
+                          display: "block",
+                        }}
+                      />
+                    )}
+
+                    <strong style={{ display: "block", marginBottom: "4px" }}>
+                      {finding.isGoal ? "🎯 Цель найдена!" : "Находка!"}
+                    </strong>
+
+                    <div style={{ fontSize: "0.9rem", marginBottom: "8px" }}>
+                      {finding.note}
+                    </div>
+
+                    <small style={{ color: "#888", display: "block" }}>
+                      {new Date(finding.timeStamp).toLocaleString()}
+                    </small>
                   </div>
+                </Popup>
+              </Marker>
+            );
+          })}
 
-                  <small style={{ color: "#888", display: "block" }}>
-                    {new Date(finding.timeStamp).toLocaleString()}
-                  </small>
-                </div>
-              </Popup>
-            </Marker>
-          ))}
           <Polyline positions={route} color="blue" weight={4} opacity={0.7} />
           <RecenterMap position={position} route={route} />
         </MapContainer>
