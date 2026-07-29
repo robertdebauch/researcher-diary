@@ -17,14 +17,16 @@ body {
 .app-container {
   width: 100%;
   min-height: 100dvh;
+  overflow: visible;
 }
 
 /* РЕЖИМ: Карта (тут скролл запрещен) */
 .map-view-container {
-  height: 100dvh;
+  height: 100dvh; /* Или 100vh, если dvh глючит */
   width: 100vw;
   position: relative;
   overflow: hidden;
+  z-index: 1;
 }
 
 /* РЕЖИМ: Списки (Архив, Summary) */
@@ -36,7 +38,7 @@ body {
   padding-bottom: 100px; /* Та самая подушка */
   font-family: sans-serif;
   box-sizing: border-box;
-  /* Здесь скролл будет естественным через body */
+  overflow: visible;
 }
 
 /* Специфика для Summary (чуть другой фон) */

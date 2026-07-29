@@ -8,16 +8,7 @@ function Archive({
   onOpenSummary,
 }) {
   return (
-    <div
-      style={{
-        padding: "20px",
-        backgroundColor: "#f5f5f5",
-        minHeight: "100vh",
-        boxSizing: "border-box",
-        fontFamily: "sans-serif",
-        paddingBottom: "100px",
-      }}
-    >
+    <div className="list-view-container">
       <h1 style={{ textAlign: "center", color: "#333" }}>Мой дневник</h1>
       <button
         onClick={onStart}

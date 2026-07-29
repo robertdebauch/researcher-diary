@@ -14,17 +14,7 @@ function SummaryView({ expedition, findings, onBack }) {
   const isGoalReached = findings.some((finding) => finding.isGoal);
 
   return (
-    <div
-      style={{
-        padding: "20px",
-        backgroundColor: "#fdfdfd",
-        minHeight: "100vh",
-        fontFamily: "sans-serif",
-        color: "#333",
-        boxSizing: "border-box",
-        paddingBottom: "100px",
-      }}
-    >
+    <div className="list-view-container summary-view-container">
       <button
         onClick={onBack}
         style={{

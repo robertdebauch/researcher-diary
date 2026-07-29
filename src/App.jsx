@@ -287,7 +287,9 @@ function App() {
   }, [isWalking, updatePosition]);
 
   return (
-    <div className="map-container">
+    <div className="app-container">
+      {" "}
+      {/* 1. Главный контейнер теперь разрешает скролл */}
       {view === "archive" ? (
         <Archive
           expeditions={expeditions}
@@ -296,7 +298,7 @@ function App() {
           onStart={() => setIsStartModalOpen(true)}
           onDeleteExpedition={deleteExpedition}
           onHardReset={handleHardReset}
-          onOpenSummary={openSummary} // <-- Передаем функцию открытия отчета
+          onOpenSummary={openSummary}
         />
       ) : view === "summary" ? (
         <SummaryView
@@ -309,7 +311,9 @@ function App() {
           onBack={() => setView("archive")}
         />
       ) : (
-        <>
+        <div className="map-view-container">
+          {" "}
+          {/* 2. Этот класс ТОЛЬКО для режима карты */}
           <MapView
             currentExpeditionId={currentExpeditionId}
             position={position}
@@ -322,16 +326,14 @@ function App() {
             setIsLogOpen={setIsLogOpen}
             goBackToArchive={() => setView("archive")}
           />
-
           <FindingsLog
             isOpen={isLogOpen}
             findings={findings}
             onClose={() => setIsLogOpen(false)}
             onDeleteFinding={deleteFinding}
           />
-        </>
+        </div>
       )}
-
       <FindingModal
         isOpen={isAddingFinding}
         note={findingNote}
@@ -343,7 +345,6 @@ function App() {
         isGoal={isGoal}
         setIsGoal={setIsGoal}
       />
-
       <StartExpeditionModal
         isOpen={isStartModalOpen}
         title={expeditionTitle}
