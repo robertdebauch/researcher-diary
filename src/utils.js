@@ -27,3 +27,19 @@ export function calculateTotalDistance(path) {
 
   return (totalMeters / 1000).toFixed(2);
 }
+
+export function calculateAverageSpeed(distanceKm, startTime, endTime) {
+  if (!startTime || !endTime) {
+    return "0.00";
+  }
+
+  const diffMs = new Date(endTime) - new Date(startTime);
+  const hours = diffMs / (1000 * 60 * 60); // Переводим миллисекунды в часы
+
+  if (hours === 0) {
+    return "0.00";
+  }
+
+  const speed = distanceKm / hours;
+  return speed.toFixed(2);
+}

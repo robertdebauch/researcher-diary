@@ -1,4 +1,4 @@
-import { calculateTotalDistance } from "../utils";
+import { calculateTotalDistance, calculateAverageSpeed } from "../utils";
 
 function SummaryView({ expedition, findings, onBack }) {
   const calculateDuration = () => {
@@ -16,6 +16,12 @@ function SummaryView({ expedition, findings, onBack }) {
   const isGoalReached = findings.some((finding) => finding.isGoal);
 
   const totalDistance = calculateTotalDistance(expedition.path);
+
+  const averageSpeed = calculateAverageSpeed(
+    totalDistance,
+    expedition.startTime,
+    expedition.endTime,
+  );
 
   return (
     <div className="list-view-container summary-view-container">
@@ -59,6 +65,8 @@ function SummaryView({ expedition, findings, onBack }) {
       <section
         style={{
           display: "flex",
+          flexWrap: "wrap",
+          gap: "15px",
           justifyContent: "space-around",
           backgroundColor: "white",
           padding: "20px",
@@ -79,6 +87,13 @@ function SummaryView({ expedition, findings, onBack }) {
             {totalDistance}
           </div>
           <div style={{ fontSize: "0.8rem", color: "#999" }}>км пути</div>
+        </div>
+
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: "1.5rem", fontWeight: "bold" }}>
+            {averageSpeed}
+          </div>
+          <div style={{ fontSize: "0.8rem", color: "#999" }}>км/ч</div>
         </div>
 
         <div style={{ textAlign: "center" }}>
