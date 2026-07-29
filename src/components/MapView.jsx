@@ -156,6 +156,7 @@ function MapView({
         <MapContainer
           center={position}
           zoom={15}
+          maxZoom={18}
           style={{
             height: "100%",
             width: "100%",

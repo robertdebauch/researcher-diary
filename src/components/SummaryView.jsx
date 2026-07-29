@@ -1,3 +1,5 @@
+import { calculateTotalDistance } from "../utils";
+
 function SummaryView({ expedition, findings, onBack }) {
   const calculateDuration = () => {
     if (!expedition.startTime || !expedition.endTime) {
@@ -12,6 +14,8 @@ function SummaryView({ expedition, findings, onBack }) {
   };
 
   const isGoalReached = findings.some((finding) => finding.isGoal);
+
+  const totalDistance = calculateTotalDistance(expedition.path);
 
   return (
     <div className="list-view-container summary-view-container">
@@ -69,6 +73,14 @@ function SummaryView({ expedition, findings, onBack }) {
           </div>
           <div style={{ fontSize: "0.8rem", color: "#999" }}>Находок</div>
         </div>
+
+        <div style={{ textAlign: "center" }}>
+          <div style={{ fontSize: "1.5rem", fontWeight: "bold" }}>
+            {totalDistance}
+          </div>
+          <div style={{ fontSize: "0.8rem", color: "#999" }}>км пути</div>
+        </div>
+
         <div style={{ textAlign: "center" }}>
           <div style={{ fontSize: "1.5rem", fontWeight: "bold" }}>
             {isGoalReached ? "✅" : "❌"}
