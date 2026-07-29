@@ -167,12 +167,18 @@ function MapView({
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
           />
 
-          {/* Маркер текущей позиции пользователя */}
-          <Marker position={position}>
+          <Marker
+            position={position}
+            icon={L.divIcon({
+              className: "custom-marker-icon",
+              html: '<div class="custom-marker-placeholder" style="background: #2196f3; color: white;">📍</div>',
+              iconSize: [40, 40],
+              iconAnchor: [20, 20],
+            })}
+          >
             <Popup>Вы здесь!</Popup>
           </Marker>
 
-          {/* Отрисовка находок с кастомными иконками */}
           {findings.map((finding) => {
             // 1. Создаем иконку
             const customIcon = L.divIcon({
@@ -184,7 +190,6 @@ function MapView({
               iconAnchor: [20, 20],
             });
 
-            // 2. Возвращаем маркер с этой иконкой
             return (
               <Marker
                 key={finding.id}
