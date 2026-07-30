@@ -1,4 +1,6 @@
-export function calculateDistance(point1, point2) {
+const MAX_WALKING_SPEED_KMPH = 20;
+
+function calculateDistance(point1, point2) {
   const R = 6371e3; // Радиус Земли в метрах
   const phi1 = (point1[0] * Math.PI) / 180;
   const phi2 = (point2[0] * Math.PI) / 180;
@@ -21,8 +23,19 @@ export function calculateTotalDistance(path) {
   if (!path || path.length < 2) return 0;
 
   let totalMeters = 0;
+
   for (let i = 0; i < path.length - 1; i++) {
-    totalMeters += calculateDistance(path[i], path[i + 1]);
+    const distance = calculateDistance(path[i], path[i + 1]);
+
+    const speedKmph = (distance * 3600) / (1000 * 5);
+
+    if (speedKmph <= MAX_WALKING_SPEED_KMPH) {
+      totalMeters += distance;
+    } else {
+      console.log(
+        `Аномальный отрезок не учитывается: скорость ${speedKmph.toFixed(1)} км/ч`,
+      );
+    }
   }
 
   return (totalMeters / 1000).toFixed(2);

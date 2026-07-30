@@ -1,5 +1,5 @@
 import L from "leaflet";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -8,10 +8,12 @@ import {
   useMap,
   Polyline,
 } from "react-leaflet";
+import "leaflet.markercluster";
+import "leaflet.markercluster/dist/MarkerCluster.css";
+import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 
 function RecenterMap({ position, route }) {
   const map = useMap();
-
   useEffect(() => {
     if (route && route.length > 0) {
       const bounds = L.polyline(route).getBounds();
@@ -35,9 +37,56 @@ function MapView({
   setIsLogOpen,
   goBackToArchive,
 }) {
+  const mapRef = useRef(null);
+
+  useEffect(() => {
+    if (!mapRef.current || !findings) return;
+
+    // Удаляем старые маркеры, если они были
+    mapRef.current.eachLayer((layer) => {
+      if (layer instanceof L.Marker && layer.options.customMarker) {
+        mapRef.current.removeLayer(layer);
+      }
+    });
+
+    const clusterGroup = L.markerClusterGroup({
+      maxClusterRadius: 0,
+      spiderfyOnMaxZoom: true,
+      showCoverageOnMap: false,
+    });
+
+    findings.forEach((finding) => {
+      const customIcon = L.divIcon({
+        className: `custom-marker-icon ${finding.isGoal ? "marker-goal" : ""}`,
+        html: finding.image
+          ? `<img src="${finding.image}" class="custom-marker-img" />`
+          : `<div class="custom-marker-placeholder">📍</div>`,
+        iconSize: [44, 44],
+        iconAnchor: [22, 22],
+      });
+
+      const marker = L.marker(finding.position, {
+        icon: customIcon,
+        customMarker: true,
+      });
+
+      marker.bindPopup(`
+        <div style="text-align: center; max-width: 200px;">
+          ${finding.image ? `<img src="${finding.image}" style="width: 100%; border-radius: 8px; margin-bottom: 8px;" />` : ""}
+          <strong style="display: block; margin-bottom: 4px;">${finding.isGoal ? "🎯 Цель найдена!" : "Находка!"}</strong>
+          <div style="font-size: 0.9rem; margin-bottom: 8px;">${finding.note}</div>
+          <small style="color: #888; display: block;">${new Date(finding.timeStamp).toLocaleString()}</small>
+        </div>
+      `);
+
+      clusterGroup.addLayer(marker);
+    });
+
+    mapRef.current.addLayer(clusterGroup);
+  }, [findings]);
+
   return (
     <>
-      {/* Кнопка возврата в архив */}
       <button
         onClick={goBackToArchive}
         style={{
@@ -56,7 +105,6 @@ function MapView({
         В архив
       </button>
 
-      {/* Панель управления сверху */}
       <div
         style={{
           position: "absolute",
@@ -161,6 +209,7 @@ function MapView({
             height: "100%",
             width: "100%",
           }}
+          ref={mapRef} // Привязываем ссылку на карту
         >
           <TileLayer
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -178,55 +227,6 @@ function MapView({
           >
             <Popup>Вы здесь!</Popup>
           </Marker>
-
-          {findings.map((finding) => {
-            // 1. Создаем иконку
-            const customIcon = L.divIcon({
-              className: "custom-marker-icon",
-              html: finding.image
-                ? `<img src="${finding.image}" class="custom-marker-img" />`
-                : `<div class="custom-marker-placeholder">📍</div>`,
-              iconSize: [40, 40],
-              iconAnchor: [20, 20],
-            });
-
-            return (
-              <Marker
-                key={finding.id}
-                position={finding.position}
-                icon={customIcon}
-              >
-                <Popup>
-                  <div style={{ textAlign: "center", maxWidth: "200px" }}>
-                    {finding.image && (
-                      <img
-                        src={finding.image}
-                        alt="Находка"
-                        style={{
-                          width: "100%",
-                          borderRadius: "8px",
-                          marginBottom: "8px",
-                          display: "block",
-                        }}
-                      />
-                    )}
-
-                    <strong style={{ display: "block", marginBottom: "4px" }}>
-                      {finding.isGoal ? "🎯 Цель найдена!" : "Находка!"}
-                    </strong>
-
-                    <div style={{ fontSize: "0.9rem", marginBottom: "8px" }}>
-                      {finding.note}
-                    </div>
-
-                    <small style={{ color: "#888", display: "block" }}>
-                      {new Date(finding.timeStamp).toLocaleString()}
-                    </small>
-                  </div>
-                </Popup>
-              </Marker>
-            );
-          })}
 
           <Polyline positions={route} color="blue" weight={4} opacity={0.7} />
           <RecenterMap position={position} route={route} />
