@@ -9,6 +9,7 @@ import "./App.css";
 import { useState, useEffect, useCallback } from "react";
 import "leaflet/dist/leaflet.css";
 import { db, clearAllData, exportAllData, importAllData } from "./db";
+import { compressImage } from "./utils.js";
 
 function App() {
   const [position, setPosition] = useState(null);
@@ -126,14 +127,19 @@ function App() {
     }
   };
 
-  const handleImageChange = (e) => {
+  const handleImageChange = async (e) => {
     const file = e.target.files[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFindingImage(reader.result);
-      };
-      reader.readAsDataURL(file);
+    if (!file) {
+      return;
+    }
+
+    try {
+      const compressedImage = await compressImage(file);
+      console.log("Размер сжатого фото:", compressedImage.length, "байт");
+      setFindingImage(compressedImage);
+    } catch (error) {
+      console.error("Ошибка при сжатии изображения:", error);
+      alert("Не удалось обработать изображение");
     }
   };
 

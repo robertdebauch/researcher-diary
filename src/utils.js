@@ -1,4 +1,4 @@
-const MAX_WALKING_SPEED_KMPH = 20;
+const MAX_WALKING_SPEED_KMPH = 60;
 
 function calculateDistance(point1, point2) {
   const R = 6371e3; // Радиус Земли в метрах
@@ -55,4 +55,39 @@ export function calculateAverageSpeed(distanceKm, startTime, endTime) {
 
   const speed = distanceKm / hours;
   return speed.toFixed(2);
+}
+
+export async function compressImage(file, maxWidth = 1200, quality = 0.7) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target.result;
+
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        let width = img.width;
+        let height = img.height;
+
+        if (width > maxWidth || height > maxWidth) {
+          const ratio = Math.min(maxWidth / width, maxWidth / height);
+          width = width * ratio;
+          height = height * ratio;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, width, height);
+
+        const dataUrl = canvas.toDataURL("image/jpeg", quality);
+        resolve(dataUrl);
+      };
+      img.onerror = (error) => reject(error);
+    };
+    reader.onerror = (error) => reject(error);
+  });
 }
