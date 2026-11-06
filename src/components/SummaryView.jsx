@@ -1,4 +1,4 @@
-import { calculateTotalDistance, calculateAverageSpeed } from "../utils";
+import { calculateRouteStats } from "../utils";
 
 function SummaryView({ expedition, findings, onBack }) {
   // Отчёт могли открыть для экспедиции, которой уже нет в state
@@ -43,13 +43,15 @@ function SummaryView({ expedition, findings, onBack }) {
 
   const isGoalReached = findings.some((finding) => finding.isGoal);
 
-  const totalDistance = calculateTotalDistance(expedition.path);
+  const { distanceMeters, distanceKm: totalDistance, movingMs } =
+    calculateRouteStats(expedition.path);
 
-  const averageSpeed = calculateAverageSpeed(
-    totalDistance,
-    expedition.startTime,
-    expedition.endTime,
-  );
+  // Скорость считаем по времени в движении, а не по общему времени прогулки:
+  // остановки на фото и отдых не должны «съедать» показатель.
+  const averageSpeed =
+    movingMs > 0
+      ? (distanceMeters / 1000 / (movingMs / 3600000)).toFixed(2)
+      : "0.00";
 
   return (
     <div className="list-view-container summary-view-container">

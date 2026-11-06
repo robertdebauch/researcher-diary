@@ -80,6 +80,27 @@ body {
   color: #2196f3;
 }
 
+/* Тумблер «следить за вами»: включается на прогулке, гаснет при ручном сдвиге карты */
+.follow-toggle {
+  position: absolute;
+  right: 16px;
+  bottom: 24px;
+  z-index: 1001;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  color: #555;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.follow-toggle.is-active {
+  background: #2196f3;
+  color: #fff;
+}
+
 /* Подпись карты скрыта ОСОЗНАННО (решение Роберта, см. AGENT-RULES.md, D-9).
    Причина: Leaflet вставляет в свою подпись-префикс флаг Украины — политический
    символ, неуместный в личном однопользовательском приложении. Формально это

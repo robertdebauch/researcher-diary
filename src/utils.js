@@ -1,6 +1,39 @@
+// Максимальная правдоподобная скорость пешехода: всё, что быстрее, — дрейф GPS.
 const MAX_WALKING_SPEED_KMPH = 60;
 
-function calculateDistance(point1, point2) {
+// Старые точки маршрута (без таймстампа) писались раз в 5 секунд — для них
+// сохраняем прежнее поведение, чтобы цифры в архиве не «прыгнули» после обновления.
+const LEGACY_POINT_INTERVAL_MS = 5000;
+
+// Разрыв больше этого расстояния при неправдоподобной скорости считаем «телепортом»
+// (восстановление сессии, потеря GPS) и рисуем маршрут отдельным сегментом.
+const TELEPORT_GAP_METERS = 200;
+
+// Как часто сбрасывать маршрут в IndexedDB. Раньше массив перезаписывался целиком
+// каждые 5 секунд — на длинной прогулке это O(n²) по объёму записи.
+export const ROUTE_SAVE_INTERVAL_MS = 20000;
+
+/** Точка маршрута: [широта, долгота, время в мс]. Время нужно для честной скорости. */
+export function createRoutePoint(latitude, longitude, timestamp = Date.now()) {
+  return [latitude, longitude, timestamp];
+}
+
+function getPointTimestamp(point) {
+  return point.length > 2 ? point[2] : null;
+}
+
+function resolveElapsedMs(point1, point2) {
+  const startTime = getPointTimestamp(point1);
+  const endTime = getPointTimestamp(point2);
+
+  if (startTime === null || endTime === null) {
+    return LEGACY_POINT_INTERVAL_MS;
+  }
+
+  return endTime - startTime;
+}
+
+export function calculateDistance(point1, point2) {
   const R = 6371e3; // Радиус Земли в метрах
   const phi1 = (point1[0] * Math.PI) / 180;
   const phi2 = (point2[0] * Math.PI) / 180;
@@ -19,42 +52,110 @@ function calculateDistance(point1, point2) {
   return R * c;
 }
 
-export function calculateTotalDistance(path) {
-  if (!path || path.length < 2) return 0;
+/** Можно ли верить отрезку: положительный интервал времени и скорость пешехода. */
+function isPlausibleSegment(point1, point2) {
+  const elapsedMs = resolveElapsedMs(point1, point2);
 
-  let totalMeters = 0;
+  if (elapsedMs <= 0) {
+    return false;
+  }
+
+  const distanceMeters = calculateDistance(point1, point2);
+  const speedKmph = (distanceMeters * 3600) / elapsedMs;
+
+  return speedKmph <= MAX_WALKING_SPEED_KMPH;
+}
+
+/**
+ * Дистанция и время в движении по маршруту.
+ * Отрезки с неправдоподобной скоростью (дрейф GPS) в расчёт не идут.
+ */
+export function calculateRouteStats(path) {
+  if (!path || path.length < 2) {
+    return { distanceMeters: 0, distanceKm: "0.00", movingMs: 0 };
+  }
+
+  let distanceMeters = 0;
+  let movingMs = 0;
 
   for (let i = 0; i < path.length - 1; i++) {
-    const distance = calculateDistance(path[i], path[i + 1]);
+    const startPoint = path[i];
+    const endPoint = path[i + 1];
 
-    const speedKmph = (distance * 3600) / (1000 * 5);
+    if (!isPlausibleSegment(startPoint, endPoint)) {
+      continue;
+    }
 
-    if (speedKmph <= MAX_WALKING_SPEED_KMPH) {
-      totalMeters += distance;
-    } else {
-      console.log(
-        `Аномальный отрезок не учитывается: скорость ${speedKmph.toFixed(1)} км/ч`,
-      );
+    distanceMeters += calculateDistance(startPoint, endPoint);
+    movingMs += resolveElapsedMs(startPoint, endPoint);
+  }
+
+  return {
+    distanceMeters,
+    distanceKm: (distanceMeters / 1000).toFixed(2),
+    movingMs,
+  };
+}
+
+/**
+ * Разбивает маршрут на сегменты по «телепортам» (восстановление сессии, потеря GPS).
+ * Leaflet не умеет рисовать разрыв внутри одной ломаной, поэтому рисуем несколько линий.
+ */
+export function splitRouteIntoSegments(path) {
+  if (!path || path.length === 0) {
+    return [];
+  }
+
+  const segments = [[path[0]]];
+
+  for (let i = 1; i < path.length; i++) {
+    const previousPoint = path[i - 1];
+    const point = path[i];
+    const gapMeters = calculateDistance(previousPoint, point);
+
+    if (gapMeters > TELEPORT_GAP_METERS && !isPlausibleSegment(previousPoint, point)) {
+      segments.push([point]);
+      continue;
+    }
+
+    segments[segments.length - 1].push(point);
+  }
+
+  return segments;
+}
+
+/** Убирает локальные выбросы GPS внутри сегмента, чтобы линия не «дёргалась». */
+export function filterImplausiblePoints(points) {
+  if (!points || points.length < 3) {
+    return points ?? [];
+  }
+
+  const filtered = [points[0]];
+
+  for (let i = 1; i < points.length; i++) {
+    const lastKeptPoint = filtered[filtered.length - 1];
+
+    if (isPlausibleSegment(lastKeptPoint, points[i])) {
+      filtered.push(points[i]);
     }
   }
 
-  return (totalMeters / 1000).toFixed(2);
+  return filtered;
 }
 
-export function calculateAverageSpeed(distanceKm, startTime, endTime) {
-  if (!startTime || !endTime) {
-    return "0.00";
+/** Добавляет точку в маршрут, пропуская повторы координат (стоим на месте). */
+export function appendRoutePoint(route, coordinates) {
+  const lastPoint = route[route.length - 1];
+
+  if (
+    lastPoint &&
+    lastPoint[0] === coordinates[0] &&
+    lastPoint[1] === coordinates[1]
+  ) {
+    return route;
   }
 
-  const diffMs = new Date(endTime) - new Date(startTime);
-  const hours = diffMs / (1000 * 60 * 60); // Переводим миллисекунды в часы
-
-  if (hours === 0) {
-    return "0.00";
-  }
-
-  const speed = distanceKm / hours;
-  return speed.toFixed(2);
+  return [...route, createRoutePoint(coordinates[0], coordinates[1])];
 }
 
 export async function compressImage(file, maxWidth = 1200, quality = 0.7) {

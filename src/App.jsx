@@ -6,10 +6,14 @@ import StartExpeditionModal from "./components/StartExpeditionModal";
 import SummaryView from "./components/SummaryView";
 
 import "./App.css";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import "leaflet/dist/leaflet.css";
 import { db, clearAllData, exportAllData, importAllData } from "./db";
-import { compressImage } from "./utils.js";
+import {
+  compressImage,
+  appendRoutePoint,
+  ROUTE_SAVE_INTERVAL_MS,
+} from "./utils.js";
 
 function App() {
   const [position, setPosition] = useState(null);
@@ -29,6 +33,15 @@ function App() {
   const [findingImage, setFindingImage] = useState(null);
   const [isGoal, setIsGoal] = useState(false);
   const [summaryExpeditionId, setSummaryExpeditionId] = useState(null);
+  // Автопрокрутка карты за пользователем. Живёт в App, чтобы сбрасываться
+  // в момент старта/открытия экспедиции, а не в эффекте MapView.
+  const [isFollowEnabled, setIsFollowEnabled] = useState(true);
+
+  const disableFollow = useCallback(() => setIsFollowEnabled(false), []);
+  const toggleFollow = useCallback(
+    () => setIsFollowEnabled((prevEnabled) => !prevEnabled),
+    [],
+  );
 
   useEffect(() => {
     async function loadData() {
@@ -47,6 +60,7 @@ function App() {
         setCurrentExpeditionId(activeExpedition.id);
         setRoute(activeExpedition.path || []);
         setIsWalking(true);
+        setIsFollowEnabled(true);
         setView("map");
 
         const activeFindings = await db.findings
@@ -64,6 +78,7 @@ function App() {
   const selectExpedition = (expedition) => {
     setCurrentExpeditionId(expedition.id);
     setRoute(expedition.path || []);
+    setIsFollowEnabled(true);
 
     db.findings
       .where("expeditionId")
@@ -84,11 +99,12 @@ function App() {
 
   const updatePosition = useCallback(
     (pos) => {
-      const newPoint = [pos.coords.latitude, pos.coords.longitude];
-      setPosition(newPoint);
+      const coordinates = [pos.coords.latitude, pos.coords.longitude];
+      setPosition(coordinates);
 
       if (isWalking) {
-        setRoute((prevRoute) => [...prevRoute, newPoint]);
+        // Точка маршрута хранит время: без него скорость приходится считать по догадке.
+        setRoute((prevRoute) => appendRoutePoint(prevRoute, coordinates));
       }
     },
     [isWalking],
@@ -111,6 +127,7 @@ function App() {
       setRoute(activeExpedition.path || []);
       setFindings(activeFindings);
       setIsWalking(true);
+      setIsFollowEnabled(true);
       setIsStartModalOpen(false);
       setView("map");
       return;
@@ -137,6 +154,7 @@ function App() {
     setRoute([]);
     setFindings([]);
     setIsWalking(true);
+    setIsFollowEnabled(true);
     setIsStartModalOpen(false);
     setExpeditionTitle("");
     setExpeditionGoal("");
@@ -350,15 +368,54 @@ function App() {
     reader.readAsText(file);
   };
 
+  const routeRef = useRef(route);
+  const lastRouteSaveRef = useRef(0);
+
+  useEffect(() => {
+    routeRef.current = route;
+  }, [route]);
+
+  // Троттлинг записи: раньше весь массив точек перезаписывался каждые 5 секунд —
+  // на длинной прогулке это O(n²) по объёму записи и лишняя нагрузка на IndexedDB.
+  // Теперь пишем не чаще раза в ROUTE_SAVE_INTERVAL_MS.
   useEffect(() => {
     if (route.length === 0 || !currentExpeditionId) {
       return;
     }
-    async function saveRouteToDB() {
-      await db.expeditions.update(currentExpeditionId, { path: route });
+
+    if (Date.now() - lastRouteSaveRef.current < ROUTE_SAVE_INTERVAL_MS) {
+      return;
     }
-    saveRouteToDB();
+
+    lastRouteSaveRef.current = Date.now();
+    db.expeditions.update(currentExpeditionId, { path: route });
   }, [route, currentExpeditionId]);
+
+  // Страховка: при уходе страницы в фон или закрытии вкладки сохраняем маршрут
+  // принудительно, не дожидаясь окна троттлинга.
+  useEffect(() => {
+    if (!currentExpeditionId) {
+      return;
+    }
+
+    function persistRoute() {
+      db.expeditions.update(currentExpeditionId, { path: routeRef.current });
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "hidden") {
+        persistRoute();
+      }
+    }
+
+    window.addEventListener("pagehide", persistRoute);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("pagehide", persistRoute);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [currentExpeditionId]);
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -425,6 +482,9 @@ function App() {
             addFinding={addFinding}
             isLogOpen={isLogOpen}
             setIsLogOpen={setIsLogOpen}
+            isFollowEnabled={isFollowEnabled}
+            onToggleFollow={toggleFollow}
+            onFollowDisabled={disableFollow}
             goBackToArchive={() => setView("archive")}
           />
           <FindingsLog

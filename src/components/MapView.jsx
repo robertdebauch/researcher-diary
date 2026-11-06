@@ -1,5 +1,5 @@
 import L from "leaflet";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import {
   MapContainer,
   TileLayer,
@@ -11,17 +11,63 @@ import {
 import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
+import {
+  filterImplausiblePoints,
+  splitRouteIntoSegments,
+} from "../utils.js";
 
-function RecenterMap({ position, route }) {
+function MapCamera({
+  position,
+  route,
+  isWalking,
+  currentExpeditionId,
+  followEnabled,
+  onFollowDisabled,
+}) {
   const map = useMap();
+  const fittedExpeditionRef = useRef(null);
+
+  // Во время прогулки следуем за пользователем, пока он сам не сдвинул карту.
   useEffect(() => {
-    if (route && route.length > 0) {
+    if (!isWalking || !followEnabled || !position) {
+      return;
+    }
+
+    map.panTo(position, { animate: true, duration: 0.5 });
+  }, [position, isWalking, followEnabled, map]);
+
+  // Просмотр архива: показываем весь маршрут один раз при открытии экспедиции,
+  // дальше карта принадлежит пользователю (раньше fitBounds дёргался каждые 5 секунд).
+  useEffect(() => {
+    if (isWalking || !currentExpeditionId) {
+      return;
+    }
+
+    if (fittedExpeditionRef.current === currentExpeditionId) {
+      return;
+    }
+
+    fittedExpeditionRef.current = currentExpeditionId;
+
+    if (route && route.length > 1) {
       const bounds = L.polyline(route).getBounds();
       map.fitBounds(bounds, { padding: [20, 20] });
     } else if (position) {
-      map.setView(position);
+      map.setView(position, 15);
     }
-  }, [position, route, map]);
+  }, [isWalking, currentExpeditionId, route, position, map]);
+
+  // Любое ручное движение карты выключает автопрокрутку.
+  useEffect(() => {
+    map.on("dragstart", onFollowDisabled);
+    map.on("zoomstart", onFollowDisabled);
+
+    return () => {
+      map.off("dragstart", onFollowDisabled);
+      map.off("zoomstart", onFollowDisabled);
+    };
+  }, [map, onFollowDisabled]);
+
   return null;
 }
 
@@ -35,10 +81,21 @@ function MapView({
   addFinding,
   isLogOpen,
   setIsLogOpen,
+  isFollowEnabled,
+  onToggleFollow,
+  onFollowDisabled,
   goBackToArchive,
 }) {
   const mapRef = useRef(null);
   const clusterGroupRef = useRef(null);
+
+  const routeSegments = useMemo(
+    () =>
+      splitRouteIntoSegments(route)
+        .map((segment) => filterImplausiblePoints(segment))
+        .filter((segment) => segment.length > 1),
+    [route],
+  );
 
   useEffect(() => {
     const map = mapRef.current;
@@ -199,6 +256,16 @@ function MapView({
         </button>
       </div>
 
+      {isWalking && (
+        <button
+          className={`follow-toggle ${isFollowEnabled ? "is-active" : ""}`}
+          onClick={onToggleFollow}
+          title="Автоматически центрировать карту на вашей позиции"
+        >
+          {isFollowEnabled ? "🎯 Следую за вами" : "🎯 Следить за вами"}
+        </button>
+      )}
+
       {!position ? (
         <div
           style={{
@@ -239,8 +306,23 @@ function MapView({
             <Popup>Вы здесь!</Popup>
           </Marker>
 
-          <Polyline positions={route} color="blue" weight={4} opacity={0.7} />
-          <RecenterMap position={position} route={route} />
+          {routeSegments.map((segment, index) => (
+            <Polyline
+              key={`route-segment-${index}`}
+              positions={segment}
+              color="blue"
+              weight={4}
+              opacity={0.7}
+            />
+          ))}
+          <MapCamera
+            position={position}
+            route={route}
+            isWalking={isWalking}
+            currentExpeditionId={currentExpeditionId}
+            followEnabled={isFollowEnabled}
+            onFollowDisabled={onFollowDisabled}
+          />
         </MapContainer>
       )}
     </>
