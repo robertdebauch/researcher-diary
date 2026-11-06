@@ -23,5 +23,13 @@ dist-ssr
 *.sln
 *.sw?
 
+# Мусор Windows (альтернативные потоки NTFS, приезжают при копировании с Windows)
+*:Zone.Identifier
+
+# Локальные заметки/черновики
+*.local.md
+
+# Конфиги инструментов намеренно не в репозитории (решение Роберта, коммит df80773).
+# Внимание: в свежем клоне без eslint.config.js команда `npm run lint` не заработает.
 eslint.config.js
 .continueignore

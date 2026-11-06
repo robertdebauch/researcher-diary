@@ -95,17 +95,51 @@ function App() {
   );
 
   const startExpedition = async () => {
-    const id = await db.expeditions.add({
+    // Защита от «висящей» экспедиции: если в базе уже есть незавершённая,
+    // продолжаем её, а не создаём дубль (иначе в БД остаётся запись без endTime).
+    const activeExpedition = expeditions.find(
+      (expedition) => !expedition.endTime,
+    );
+
+    if (activeExpedition) {
+      const activeFindings = await db.findings
+        .where("expeditionId")
+        .equals(activeExpedition.id)
+        .toArray();
+
+      setCurrentExpeditionId(activeExpedition.id);
+      setRoute(activeExpedition.path || []);
+      setFindings(activeFindings);
+      setIsWalking(true);
+      setIsStartModalOpen(false);
+      setView("map");
+      return;
+    }
+
+    const newExpedition = {
       startTime: new Date(),
+      endTime: null,
       path: [],
       title: expeditionTitle || "Без названия",
       goal: expeditionGoal || "Исследование",
-    });
+    };
+
+    const id = await db.expeditions.add(newExpedition);
+
+    // Держим state в синхроне с базой, иначе архив не увидит новую прогулку
+    // до перезагрузки страницы.
+    setExpeditions((prevExpeditions) => [
+      { ...newExpedition, id },
+      ...prevExpeditions,
+    ]);
 
     setCurrentExpeditionId(id);
     setRoute([]);
+    setFindings([]);
     setIsWalking(true);
     setIsStartModalOpen(false);
+    setExpeditionTitle("");
+    setExpeditionGoal("");
     setView("map");
   };
 
@@ -118,9 +152,22 @@ function App() {
       }
     } else {
       if (currentExpeditionId) {
+        const endTime = new Date();
+
         await db.expeditions.update(currentExpeditionId, {
-          endTime: new Date(),
+          endTime,
+          path: route,
         });
+
+        // Синхронизируем state: иначе в архиве у этой прогулки не будет
+        // endTime (отчёт покажет «Неизвестно») и последних точек маршрута.
+        setExpeditions((prevExpeditions) =>
+          prevExpeditions.map((expedition) =>
+            expedition.id === currentExpeditionId
+              ? { ...expedition, endTime, path: route }
+              : expedition,
+          ),
+        );
       }
       setIsWalking(false);
       setCurrentExpeditionId(null);
@@ -168,9 +215,13 @@ function App() {
     };
 
     try {
-      await db.findings.add(newFinding);
-      setFindings((prev) => [...prev, newFinding]);
-      setAllFindingsInDB((prev) => [...prev, newFinding]);
+      // Dexie возвращает ключ записи — без него у находки в state нет id,
+      // из-за чего ломаются React-ключи и удаление.
+      const findingId = await db.findings.add(newFinding);
+      const savedFinding = { ...newFinding, id: findingId };
+
+      setFindings((prev) => [...prev, savedFinding]);
+      setAllFindingsInDB((prev) => [...prev, savedFinding]);
 
       // СБРОС состояний после сохранения
       setIsAddingFinding(false);

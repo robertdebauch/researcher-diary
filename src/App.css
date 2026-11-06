@@ -1,4 +1,3 @@
-Apply
 /* Общие настройки */
 html,
 body {
@@ -7,6 +6,10 @@ body {
   width: 100%;
   /* Убираем жесткий height: 100% и overflow: hidden */
   -webkit-overflow-scrolling: touch;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+    Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
 
 * {
@@ -23,7 +26,7 @@ body {
 /* РЕЖИМ: Карта (тут скролл запрещен) */
 .map-view-container {
   height: 100dvh; /* Или 100vh, если dvh глючит */
-  width: 100vw;
+  width: 100%; /* Не 100vw: иначе горизонтальный скролл из-за ширины вьюпорта */
   position: relative;
   overflow: hidden;
   z-index: 1;
@@ -77,7 +80,14 @@ body {
   color: #2196f3;
 }
 
-/* убираем атрибуты, поскольку проект никто не увидит, кроме автора */
+/* Подпись карты скрыта ОСОЗНАННО (решение Роберта, см. AGENT-RULES.md, D-9).
+   Причина: Leaflet вставляет в свою подпись-префикс флаг Украины — политический
+   символ, неуместный в личном однопользовательском приложении. Формально это
+   расходится с условиями использования тайлов OSM; риск принят для личного
+   использования и НЕ должен «исправляться» агентом повторно.
+   Если приложение когда-нибудь станет публичным: убрать строку ниже и добавить
+   в MapView.jsx <AttributionControl prefix={false} /> — останется только
+   «© OpenStreetMap», без флага и без ссылки на Leaflet. */
 .leaflet-control-attribution {
   display: none !important;
 }

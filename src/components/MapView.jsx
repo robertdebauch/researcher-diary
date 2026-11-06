@@ -38,16 +38,19 @@ function MapView({
   goBackToArchive,
 }) {
   const mapRef = useRef(null);
+  const clusterGroupRef = useRef(null);
 
   useEffect(() => {
-    if (!mapRef.current || !findings) return;
+    const map = mapRef.current;
+    if (!map) return;
 
-    // Удаляем старые маркеры, если они были
-    mapRef.current.eachLayer((layer) => {
-      if (layer instanceof L.Marker && layer.options.customMarker) {
-        mapRef.current.removeLayer(layer);
-      }
-    });
+    // Кластер-группа лежит на карте как LayerGroup, а не как Marker,
+    // поэтому старый слой нужно снимать явно — иначе каждый новый набор
+    // находок добавляет ещё один слой, и маркеры дублируются.
+    if (clusterGroupRef.current) {
+      map.removeLayer(clusterGroupRef.current);
+      clusterGroupRef.current = null;
+    }
 
     const clusterGroup = L.markerClusterGroup({
       maxClusterRadius: 0,
@@ -82,7 +85,15 @@ function MapView({
       clusterGroup.addLayer(marker);
     });
 
-    mapRef.current.addLayer(clusterGroup);
+    clusterGroupRef.current = clusterGroup;
+    map.addLayer(clusterGroup);
+
+    return () => {
+      if (clusterGroupRef.current) {
+        map.removeLayer(clusterGroupRef.current);
+        clusterGroupRef.current = null;
+      }
+    };
   }, [findings]);
 
   return (

@@ -1,6 +1,32 @@
 import { calculateTotalDistance, calculateAverageSpeed } from "../utils";
 
 function SummaryView({ expedition, findings, onBack }) {
+  // Отчёт могли открыть для экспедиции, которой уже нет в state
+  // (например, сразу после удаления) — не роняем всё приложение.
+  if (!expedition) {
+    return (
+      <div className="list-view-container summary-view-container">
+        <button
+          onClick={onBack}
+          style={{
+            border: "none",
+            background: "none",
+            color: "#2196f3",
+            cursor: "pointer",
+            fontSize: "1rem",
+            padding: "0",
+            marginBottom: "20px",
+          }}
+        >
+          ← Вернуться в архив
+        </button>
+        <p style={{ textAlign: "center", color: "#888" }}>
+          Экспедиция не найдена
+        </p>
+      </div>
+    );
+  }
+
   const calculateDuration = () => {
     if (!expedition.startTime || !expedition.endTime) {
       return "Неизвестно";
@@ -8,9 +34,11 @@ function SummaryView({ expedition, findings, onBack }) {
 
     const difference =
       new Date(expedition.endTime) - new Date(expedition.startTime);
-    const minutes = Math.floor(difference / 60000);
-    const hours = Math.floor(minutes / 60);
-    return hours > 0 ? `${hours}ч ${minutes}м` : `${minutes} мин`;
+    const totalMinutes = Math.floor(difference / 60000);
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+
+    return hours > 0 ? `${hours}ч ${minutes}м` : `${totalMinutes} мин`;
   };
 
   const isGoalReached = findings.some((finding) => finding.isGoal);

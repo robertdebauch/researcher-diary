@@ -7,9 +7,15 @@ db.version(1).stores({
   findings: "++id, expeditionId, timeStamp",
 });
 
+/** Версия формата бэкапа, которую умеет читать текущая сборка. */
+const BACKUP_FORMAT_VERSION = 1;
+
 export async function clearAllData() {
-  await db.expeditions.clear();
-  await db.findings.clear();
+  // Одна транзакция: либо очищаем обе таблицы, либо не трогаем ничего.
+  await db.transaction("rw", db.expeditions, db.findings, async () => {
+    await db.expeditions.clear();
+    await db.findings.clear();
+  });
 }
 
 export async function exportAllData() {
@@ -17,21 +23,34 @@ export async function exportAllData() {
   const findings = await db.findings.toArray();
 
   return {
+    version: BACKUP_FORMAT_VERSION,
+    exportedAt: new Date().toISOString(),
     expeditions,
     findings,
-    varsion: 1,
   };
 }
 
-// @param {Object} data
-
 export async function importAllData(data) {
-  if (!data.expeditions || !data.findings) {
+  if (!Array.isArray(data?.expeditions) || !Array.isArray(data?.findings)) {
     throw new Error("Неверный формат файла бэкапа");
   }
 
-  await clearAllData();
+  // Раньше ключ версии писался с опечаткой ("varsion") — читаем оба варианта.
+  const backupVersion = data.version ?? data.varsion ?? 1;
 
-  await db.expeditions.bulkPut(data.expeditions);
-  await db.findings.bulkPut(data.findings);
+  if (backupVersion > BACKUP_FORMAT_VERSION) {
+    throw new Error(
+      `Бэкап создан более новой версией приложения (формат v${backupVersion}, поддерживается до v${BACKUP_FORMAT_VERSION})`,
+    );
+  }
+
+  // Всё в одной транзакции: если запись упадёт (квота, битые данные),
+  // старые данные не будут стёрты.
+  await db.transaction("rw", db.expeditions, db.findings, async () => {
+    await db.expeditions.clear();
+    await db.findings.clear();
+    await db.expeditions.bulkPut(data.expeditions);
+    await db.findings.bulkPut(data.findings);
+  });
 }
+
