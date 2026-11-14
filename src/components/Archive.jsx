@@ -9,247 +9,122 @@ function Archive({
   onExport,
   onImport,
 }) {
+  const formatStartTime = (value) =>
+    new Date(value).toLocaleString("ru-RU", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
   return (
-    <div className="list-view-container">
-      <h1 style={{ textAlign: "center", color: "#333" }}>Мой дневник</h1>
-      <button
-        onClick={onStart}
-        style={{
-          width: "100%",
-          padding: "15px",
-          fontSize: "1.2rem",
-          borderRadius: "15px",
-          border: "none",
-          backgroundColor: "#4caf50",
-          color: "white",
-          cursor: "pointer",
-          marginBottom: "20px",
-          boxShadow: "0 4px 6px rgba(0,0,0,0.1)",
-        }}
-      >
-        Начать новую экспедицию
+    <div className="list-view">
+      <header>
+        <h1 className="list-view__title">RESEARCHER</h1>
+        <p className="list-view__subtitle label">Дневник исследователя</p>
+      </header>
+
+      <button className="action-primary" onClick={onStart}>
+        <span>Новая экспедиция</span>
+        <span aria-hidden="true">+</span>
       </button>
-      <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+
+      <section className="section">
+        <p className="section__label">Экспедиции · {expeditions.length}</p>
+
         {expeditions.length === 0 ? (
-          <p style={{ textAlign: "center", color: "#888" }}>
-            Экспедиций пока нет
+          <p className="empty-state">
+            Пока ни одной прогулки. Начните с первой.
           </p>
         ) : (
-          expeditions.map((exp) => {
+          expeditions.map((expedition) => {
             const expeditionFindings = allFindings.filter(
-              (f) => f.expeditionId === exp.id,
+              (finding) => finding.expeditionId === expedition.id,
             );
-
             const goalFinding = expeditionFindings.find(
-              (f) => f.isGoal && f.image,
+              (finding) => finding.isGoal && finding.image,
             );
-            const anyFinding = expeditionFindings.find((f) => f.image);
+            const anyFinding = expeditionFindings.find(
+              (finding) => finding.image,
+            );
             const previewImage = goalFinding?.image || anyFinding?.image;
 
             return (
-              <div
-                key={exp.id}
-                onClick={() => onSelect(exp)}
-                style={{
-                  position: "relative",
-                  backgroundColor: "white",
-                  padding: "15px",
-                  borderRadius: "15px",
-                  boxShadow: "0 2px 8px rgba(0,0,0,0.08)",
-                  cursor: "pointer",
-                  display: "flex",
-                  gap: "15px",
-                  alignItems: "center",
-                  transition: "transform 0.2s",
-                }}
-                onMouseEnter={(e) =>
-                  (e.currentTarget.style.transform = "scale(1.02)")
-                }
-                onMouseLeave={(e) =>
-                  (e.currentTarget.style.transform = "scale(1)")
-                }
-              >
-                {/* Превью-картинка */}
-                <div
-                  style={{
-                    width: "80px",
-                    height: "80px",
-                    borderRadius: "10px",
-                    overflow: "hidden",
-                    backgroundColor: "#eee",
-                    flexShrink: 0,
-                  }}
+              <div className="row" key={expedition.id}>
+                <button
+                  className="row__main"
+                  onClick={() => onSelect(expedition)}
                 >
                   {previewImage ? (
-                    <img
-                      src={previewImage}
-                      alt="Превью"
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "cover",
-                      }}
-                    />
+                    <img className="row__thumb" src={previewImage} alt="" />
                   ) : (
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        justifyContent: "center",
-                        height: "100%",
-                        fontSize: "2rem",
-                      }}
-                    >
-                      🗺️
-                    </div>
+                    <span className="row__thumb row__thumb--empty">—</span>
                   )}
-                </div>
 
-                <div style={{ flexGrow: 1 }}>
-                  <div
-                    style={{
-                      fontWeight: "bold",
-                      fontSize: "1.1rem",
-                      color: "#333",
-                    }}
-                  >
-                    {exp.title}
-                  </div>
-                  <div
-                    style={{
-                      fontSize: "0.85rem",
-                      color: "#666",
-                      marginBottom: "5px",
-                    }}
-                  >
-                    Цель: {exp.goal}
-                  </div>
-                  <div style={{ fontSize: "0.8rem", color: "#999" }}>
-                    {new Date(exp.startTime).toLocaleString()}
-                  </div>
-                </div>
-
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDeleteExpedition(exp.id);
-                  }}
-                  style={{
-                    position: "absolute",
-                    top: "10px",
-                    right: "10px",
-                    backgroundColor: "transparent",
-                    border: "none",
-                    cursor: "pointer",
-                    fontSize: "1.1rem",
-                    color: "#ccc", // Светло-серый, чтобы не отвлекать
-                    transition: "color 0.2s",
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.color = "red")}
-                  onMouseLeave={(e) => (e.currentTarget.style.color = "#ccc")}
-                  title="Удалить экспедицию"
-                >
-                  🗑️
+                  <span className="row__body">
+                    <span className="row__title">{expedition.title}</span>
+                    <span className="row__goal">«{expedition.goal}»</span>
+                    <span className="row__meta">
+                      {formatStartTime(expedition.startTime)}
+                    </span>
+                  </span>
                 </button>
 
-                <div style={{ textAlign: "right", minWidth: "80px" }}>
-                  <div
-                    style={{
-                      color: "#2196f3",
-                      fontWeight: "bold",
-                      fontSize: "0.9rem",
-                    }}
+                <div className="row__aside">
+                  <span
+                    className={`row__count ${expeditionFindings.length > 0 ? "" : "row__count--empty"}`}
                   >
                     {expeditionFindings.length} находок
-                  </div>
-                  <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onOpenSummary(exp.id);
-                    }}
-                    style={{
-                      color: "#4caf50",
-                      fontSize: "0.8rem",
-                      fontWeight: "bold",
-                      cursor: "pointer",
-                    }}
+                  </span>
+                  <button
+                    className="btn btn--muted"
+                    onClick={() => onOpenSummary(expedition.id)}
                   >
-                    Отчет →
-                  </div>
+                    отчёт
+                  </button>
+                  <button
+                    className="btn btn--muted btn--danger"
+                    onClick={() => onDeleteExpedition(expedition.id)}
+                    aria-label="Удалить экспедицию"
+                  >
+                    удалить
+                  </button>
                 </div>
               </div>
             );
           })
         )}
-      </div>
+      </section>
 
-      <div
-        style={{
-          display: "flex",
-          gap: "10px",
-          marginTop: "20px",
-          marginBottom: "20px",
-        }}
-      >
-        <button
-          onClick={onExport}
-          style={{
-            flex: 1,
-            padding: "10px",
-            backgroundColor: "white",
-            border: "1px solid #ddd",
-            borderRadius: "10px",
-            cursor: "pointer",
-            fontSize: "0.8rem",
-            color: "#666",
-          }}
-        >
-          💾 Экспорт (JSON)
-        </button>
+      <section className="section">
+        <p className="section__label">Данные</p>
 
-        <label
-          style={{
-            flex: 1,
-            padding: "10px",
-            backgroundColor: "white",
-            border: "1px solid #ddd",
-            borderRadius: "10px",
-            cursor: "pointer",
-            fontSize: "0.8rem",
-            color: "#666",
-            textAlign: "center",
-            display: "block",
-          }}
-        >
-          📥 Импорт (JSON)
-          <input
-            type="file"
-            accept=".json"
-            onChange={onImport}
-            style={{ display: "none" }}
-          />
-        </label>
-      </div>
-      {expeditions.length > 0 && (
-        <button
-          onClick={onHardReset}
-          style={{
-            width: "100%",
-            marginTop: "40px",
-            padding: "10px",
-            backgroundColor: "transparent",
-            color: "#aaa",
-            border: "1px solid #ddd",
-            borderRadius: "10px",
-            cursor: "pointer",
-            fontSize: "0.8rem",
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.color = "red")}
-          onMouseLeave={(e) => (e.currentTarget.style.color = "#aaa")}
-        >
-          Полный сброс всех данных
-        </button>
-      )}
+        <div className="actions-row">
+          <button className="btn" onClick={onExport}>
+            Экспорт JSON
+          </button>
+
+          <label className="btn">
+            Импорт JSON
+            <input
+              type="file"
+              accept=".json"
+              onChange={onImport}
+              className="visually-hidden"
+            />
+          </label>
+        </div>
+
+        {expeditions.length > 0 && (
+          <button
+            className="btn btn--muted btn--danger"
+            onClick={onHardReset}
+          >
+            Полный сброс данных
+          </button>
+        )}
+      </section>
     </div>
   );
 }

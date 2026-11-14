@@ -15,138 +15,55 @@ function FindingModal({
 
   return (
     <div
-      style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: "rgba(0,0,0,0.5)",
-        zIndex: 2000,
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
+      className="sheet"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="finding-title"
     >
-      <div
-        style={{
-          backgroundColor: "white",
-          padding: "20px",
-          borderRadius: "20px",
-          width: "80%",
-          maxWidth: "400px",
-          boxShadow: "0 4px 15px rgba(0,0,0,0.3)",
-        }}
-      >
-        <h3 style={{ marginTop: 0 }}>Что вы нашли?</h3>
+      <div className="sheet__panel">
+        <p className="section__label">Находка</p>
+        <h3 className="sheet__title" id="finding-title">
+          Что вы нашли?
+        </h3>
 
         <textarea
-          style={{
-            width: "100%",
-            height: "100px",
-            marginBottom: "15px",
-            padding: "10px",
-            borderRadius: "10px",
-            border: "1px solid #ccc",
-            boxSizing: "border-box",
-          }}
+          className="field"
+          rows={4}
           value={note}
-          onChange={(e) => setNote(e.target.value)}
-          placeholder="Опишите вашу находку..."
+          onChange={(event) => setNote(event.target.value)}
+          placeholder="Опишите находку…"
         />
 
-        {/* СЕКЦИЯ ФОТО - теперь отдельно */}
-        <div style={{ marginBottom: "15px" }}>
-          <label
-            style={{
-              display: "block",
-              marginBottom: "5px",
-              fontSize: "0.9rem",
-              color: "#666",
-            }}
-          >
-            Фото находки:
-          </label>
+        <label className="btn btn--muted">
+          {image ? "Фото выбрано · заменить" : "Сфотографировать или выбрать фото"}
           <input
             type="file"
             accept="image/*"
             capture="environment"
             onChange={onImageChange}
-            style={{ width: "100%" }}
+            className="visually-hidden"
           />
-          {image && (
-            <img
-              src={image}
-              alt="Preview"
-              style={{
-                width: "100%",
-                height: "100px",
-                objectFit: "cover",
-                marginTop: "10px",
-                borderRadius: "10px",
-              }}
-            />
-          )}
-        </div>
+        </label>
 
-        {/* СЕКЦИЯ ЦЕЛИ - теперь отдельно */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: "10px",
-            marginBottom: "20px",
-            backgroundColor: "#e3f2fd",
-            padding: "10px",
-            borderRadius: "10px",
-          }}
-        >
+        {image && (
+          <img className="finding__image" src={image} alt="Превью находки" />
+        )}
+
+        <label className="check">
           <input
             type="checkbox"
-            id="goal-check"
-            checked={isGoal || false} // Добавил || false чтобы не было ошибки с null
-            onChange={(e) => setIsGoal(e.target.checked)}
-            style={{ width: "20px", height: "20px" }}
+            className="check__input"
+            checked={isGoal || false}
+            onChange={(event) => setIsGoal(event.target.checked)}
           />
-          <label
-            htmlFor="goal-check"
-            style={{
-              cursor: "pointer",
-              fontWeight: "bold",
-              color: "#1976d2",
-            }}
-          >
-            Это была моя цель! 🎯
-          </label>
-        </div>
+          <span>Это была моя цель</span>
+        </label>
 
-        {/* КНОПКИ - теперь в своем отдельном контейнере */}
-        <div
-          style={{ display: "flex", justifyContent: "flex-end", gap: "10px" }}
-        >
-          <button
-            onClick={onClose}
-            style={{
-              padding: "10px 20px",
-              borderRadius: "10px",
-              border: "none",
-              cursor: "pointer",
-              backgroundColor: "#ccc",
-            }}
-          >
+        <div className="sheet__actions">
+          <button className="btn btn--muted" onClick={onClose}>
             Отмена
           </button>
-          <button
-            onClick={onSave}
-            style={{
-              padding: "10px 20px",
-              borderRadius: "10px",
-              border: "none",
-              cursor: "pointer",
-              backgroundColor: "#2196f3",
-              color: "white",
-            }}
-          >
+          <button className="btn btn--accent" onClick={onSave}>
             Сохранить
           </button>
         </div>

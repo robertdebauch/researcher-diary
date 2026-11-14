@@ -5,9 +5,11 @@ import FindingsLog from "./components/FindingsLog";
 import StartExpeditionModal from "./components/StartExpeditionModal";
 import SummaryView from "./components/SummaryView";
 
-import "./App.css";
 import { useState, useEffect, useCallback, useRef } from "react";
+// Порядок важен: стили Leaflet подключаем ДО App.css, иначе дефолты Leaflet
+// перебивают наши правила (белые скруглённые попапы, тени).
 import "leaflet/dist/leaflet.css";
+import "./App.css";
 import { db, clearAllData, exportAllData, importAllData } from "./db";
 import {
   compressImage,

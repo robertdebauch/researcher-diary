@@ -9,7 +9,7 @@
 - **Находки**: фото с камеры (`capture="environment"`), сжатие до 1200px/JPEG 0.7 перед записью в БД, заметка, отметка «это была моя цель», журнал находок выезжающей панелью.
 - **Отчёт**: длительность, дистанция (haversine с фильтром GPS-аномалий), средняя скорость, достигнута ли цель, лента находок.
 - **Надёжность**: восстановление незавершённой прогулки после закрытия вкладки, экспорт/импорт всей базы в JSON, hard reset.
-- **PWA**: манифест, standalone-режим, иконки 192/512, мета-теги для iOS.
+- **PWA**: манифест, standalone-режим, иконки 192/512, мета-теги для iOS и service worker — оболочка открывается офлайн (тайлы карты требуют сети).
 
 ## Стек
 
@@ -19,13 +19,15 @@ React 19, Vite 8, Dexie 4 (IndexedDB), Leaflet 1.9 + react-leaflet 5 + leaflet.m
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173/researcher-diary/
+npm run dev                      # http://localhost:5173/researcher-diary/ (без service worker)
 npm run lint
-npm run build    # dist/
-npm run deploy   # публикация на GitHub Pages
+npm run check:route              # проверка математики маршрута
+npm run build                    # dist/
+npm run preview -- --port 4173   # проверка сборки вместе с service worker
+npm run deploy                   # публикация на GitHub Pages
 ```
 
-Геолокация работает только на `localhost` или HTTPS. В `vite.config.js` `base` должен совпадать с именем репозитория (`/researcher-diary/`).
+Геолокация работает только на `localhost` или HTTPS. В `vite.config.js` `base` должен совпадать с именем репозитория (`/researcher-diary/`). Офлайн проверяется на preview: DevTools → Network → Offline → reload.
 
 ## Структура
 

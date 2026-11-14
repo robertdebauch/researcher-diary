@@ -11,10 +11,7 @@ import {
 import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
-import {
-  filterImplausiblePoints,
-  splitRouteIntoSegments,
-} from "../utils.js";
+import { filterImplausiblePoints, splitRouteIntoSegments } from "../utils.js";
 
 function MapCamera({
   position,
@@ -115,27 +112,40 @@ function MapView({
       showCoverageOnMap: false,
     });
 
-    findings.forEach((finding) => {
-      const customIcon = L.divIcon({
+    const buildIcon = (finding, size) =>
+      L.divIcon({
         className: `custom-marker-icon ${finding.isGoal ? "marker-goal" : ""}`,
         html: finding.image
           ? `<img src="${finding.image}" class="custom-marker-img" />`
-          : `<div class="custom-marker-placeholder">📍</div>`,
-        iconSize: [44, 44],
-        iconAnchor: [22, 22],
+          : `<div class="custom-marker-placeholder">+</div>`,
+        iconSize: [size, size],
+        iconAnchor: [size / 2, size / 2],
       });
+
+    findings.forEach((finding) => {
+      const baseSize = finding.isGoal ? 54 : 44;
 
       const marker = L.marker(finding.position, {
-        icon: customIcon,
+        icon: buildIcon(finding, baseSize),
         customMarker: true,
+        // Цель — поверх остальных: масштаб виден даже при наслоении.
+        zIndexOffset: finding.isGoal ? 400 : 0,
       });
 
+      // Акцент «выбранной» точки — масштабом, а не обводкой.
+      marker.on("popupopen", () => marker.setIcon(buildIcon(finding, baseSize + 14)));
+      marker.on("popupclose", () => marker.setIcon(buildIcon(finding, baseSize)));
+
+      const labelColor = finding.isGoal ? "#c7e36a" : "#999";
+
       marker.bindPopup(`
-        <div style="text-align: center; max-width: 200px;">
-          ${finding.image ? `<img src="${finding.image}" style="width: 100%; border-radius: 8px; margin-bottom: 8px;" />` : ""}
-          <strong style="display: block; margin-bottom: 4px;">${finding.isGoal ? "🎯 Цель найдена!" : "Находка!"}</strong>
-          <div style="font-size: 0.9rem; margin-bottom: 8px;">${finding.note}</div>
-          <small style="color: #888; display: block;">${new Date(finding.timeStamp).toLocaleString()}</small>
+        <div style="max-width: 230px;">
+          ${finding.image ? `<img src="${finding.image}" style="display: block; width: 100%;" />` : ""}
+          <div style="padding: 10px 12px 12px;">
+            <div style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: ${labelColor}; margin-bottom: 6px;">${finding.isGoal ? "цель найдена" : "находка"}</div>
+            <div style="font-family: var(--font-note); font-style: italic; font-size: 15px; line-height: 1.4; color: #fff;">${finding.note}</div>
+            <div style="margin-top: 8px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.04em; color: #636362;">${new Date(finding.timeStamp).toLocaleString()}</div>
+          </div>
         </div>
       `);
 
@@ -155,139 +165,29 @@ function MapView({
 
   return (
     <>
-      <button
-        onClick={goBackToArchive}
-        style={{
-          position: "absolute",
-          top: "20px",
-          left: "20px",
-          zIndex: 1001,
-          padding: "10px",
-          borderRadius: "10px",
-          border: "none",
-          backgroundColor: "white",
-          cursor: "pointer",
-          boxShadow: "0 2px 5px rgba(0,0,0,0.2)",
-        }}
-      >
-        В архив
-      </button>
+      <div className="map-overlay">
+        <button className="map-chip" onClick={goBackToArchive}>
+          ← Архив
+        </button>
 
-      <div
-        style={{
-          position: "absolute",
-          top: "20px",
-          left: "50%",
-          transform: "translateX(-50%)",
-          zIndex: 1000,
-          backgroundColor: "white",
-          padding: "10px 20px",
-          borderRadius: "20px",
-          boxShadow: "0 2px 10px rgba(0,0,0,0.2)",
-          cursor: "pointer",
-        }}
-      >
-        {isWalking || !currentExpeditionId ? (
-          <button
-            onClick={toggleWalking}
-            style={{
-              padding: "10px 20px",
-              fontSize: "1rem",
-              borderRadius: "15px",
-              border: "none",
-              backgroundColor: isWalking ? "#ff4d4d" : "#4caf50",
-              color: "white",
-              cursor: "pointer",
-            }}
-          >
-            {isWalking ? "Остановить прогулку" : "Начать прогулку"}
-          </button>
-        ) : (
-          <div
-            style={{
-              padding: "10px 20px",
-              fontSize: "1rem",
-              color: "#666",
-              marginBottom: "10px",
-              textAlign: "center",
-              fontWeight: "bold",
-            }}
-          >
-            Просмотр архива
-          </div>
-        )}
-
-        {isWalking && (
-          <button
-            onClick={addFinding}
-            style={{
-              padding: "10px 20px",
-              fontSize: "1rem",
-              borderRadius: "15px",
-              border: "none",
-              backgroundColor: "#2196f3",
-              color: "white",
-              cursor: "pointer",
-              marginTop: "10px",
-              display: "block",
-              width: "100%",
-            }}
-          >
-            Зафиксировать находку
-          </button>
-        )}
-
-        <button
-          onClick={() => setIsLogOpen(!isLogOpen)}
-          style={{
-            padding: "10px 20px",
-            fontSize: "1rem",
-            borderRadius: "15px",
-            border: "none",
-            backgroundColor: "#607d8b",
-            color: "white",
-            cursor: "pointer",
-            marginTop: "10px",
-            display: "block",
-            width: "100%",
-          }}
-        >
-          {isLogOpen ? "Закрыть журнал" : "Открыть журнал"}
+        <button className="map-chip" onClick={() => setIsLogOpen(!isLogOpen)}>
+          Журнал · {findings.length}
         </button>
       </div>
 
-      {isWalking && (
-        <button
-          className={`follow-toggle ${isFollowEnabled ? "is-active" : ""}`}
-          onClick={onToggleFollow}
-          title="Автоматически центрировать карту на вашей позиции"
-        >
-          {isFollowEnabled ? "🎯 Следую за вами" : "🎯 Следить за вами"}
-        </button>
-      )}
-
       {!position ? (
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            height: "100vh",
-            fontSize: "1.5rem",
-          }}
-        >
-          Определяем ваше местоположение...
-        </div>
+        <div className="geo-waiting">Определяем ваше местоположение…</div>
       ) : (
         <MapContainer
           center={position}
           zoom={15}
           maxZoom={18}
+          zoomControl={false}
           style={{
             height: "100%",
             width: "100%",
           }}
-          ref={mapRef} // Привязываем ссылку на карту
+          ref={mapRef}
         >
           <TileLayer
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -297,22 +197,19 @@ function MapView({
           <Marker
             position={position}
             icon={L.divIcon({
-              className: "custom-marker-icon",
-              html: '<div class="custom-marker-placeholder" style="background: #2196f3; color: white;">📍</div>',
-              iconSize: [40, 40],
-              iconAnchor: [20, 20],
+              className: "custom-marker-icon marker-position",
+              html: "",
+              iconSize: [16, 16],
+              iconAnchor: [8, 8],
             })}
           >
-            <Popup>Вы здесь!</Popup>
+            <Popup>Вы здесь</Popup>
           </Marker>
 
           {routeSegments.map((segment, index) => (
             <Polyline
               key={`route-segment-${index}`}
               positions={segment}
-              color="blue"
-              weight={4}
-              opacity={0.7}
             />
           ))}
           <MapCamera
@@ -324,6 +221,32 @@ function MapView({
             onFollowDisabled={onFollowDisabled}
           />
         </MapContainer>
+      )}
+
+      <div className="map-bottom">
+        {isWalking || !currentExpeditionId ? (
+          <button className="map-chip" onClick={toggleWalking}>
+            {isWalking ? "Остановить" : "Начать прогулку"}
+          </button>
+        ) : (
+          <span className="map-chip map-chip--muted">Просмотр</span>
+        )}
+
+        {isWalking && (
+          <button className="map-chip map-chip--muted" onClick={onToggleFollow}>
+            {isFollowEnabled ? "слежу" : "следить"}
+          </button>
+        )}
+      </div>
+
+      {isWalking && position && (
+        <button
+          className="shutter"
+          onClick={addFinding}
+          aria-label="Зафиксировать находку"
+        >
+          +
+        </button>
       )}
     </>
   );

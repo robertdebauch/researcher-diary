@@ -1,35 +1,21 @@
 import { calculateRouteStats } from "../utils";
 
 function SummaryView({ expedition, findings, onBack }) {
-  // Отчёт могли открыть для экспедиции, которой уже нет в state
-  // (например, сразу после удаления) — не роняем всё приложение.
+  // Отчёт могли открыть для экспедиции, которой уже нет в state — не роняем приложение.
   if (!expedition) {
     return (
-      <div className="list-view-container summary-view-container">
-        <button
-          onClick={onBack}
-          style={{
-            border: "none",
-            background: "none",
-            color: "#2196f3",
-            cursor: "pointer",
-            fontSize: "1rem",
-            padding: "0",
-            marginBottom: "20px",
-          }}
-        >
-          ← Вернуться в архив
+      <div className="list-view">
+        <button className="btn btn--muted" onClick={onBack}>
+          ← Архив
         </button>
-        <p style={{ textAlign: "center", color: "#888" }}>
-          Экспедиция не найдена
-        </p>
+        <p className="empty-state">Экспедиция не найдена</p>
       </div>
     );
   }
 
   const calculateDuration = () => {
     if (!expedition.startTime || !expedition.endTime) {
-      return "Неизвестно";
+      return "не завершена";
     }
 
     const difference =
@@ -38,162 +24,89 @@ function SummaryView({ expedition, findings, onBack }) {
     const hours = Math.floor(totalMinutes / 60);
     const minutes = totalMinutes % 60;
 
-    return hours > 0 ? `${hours}ч ${minutes}м` : `${totalMinutes} мин`;
+    return hours > 0 ? `${hours} ч ${minutes} мин` : `${totalMinutes} мин`;
   };
 
   const isGoalReached = findings.some((finding) => finding.isGoal);
 
-  const { distanceMeters, distanceKm: totalDistance, movingMs } =
-    calculateRouteStats(expedition.path);
+  const { distanceMeters, distanceKm, movingMs } = calculateRouteStats(
+    expedition.path,
+  );
 
-  // Скорость считаем по времени в движении, а не по общему времени прогулки:
-  // остановки на фото и отдых не должны «съедать» показатель.
+  // Скорость — по времени в движении, а не по общему времени прогулки.
   const averageSpeed =
     movingMs > 0
-      ? (distanceMeters / 1000 / (movingMs / 3600000)).toFixed(2)
-      : "0.00";
+      ? (distanceMeters / 1000 / (movingMs / 3600000)).toFixed(1)
+      : "0.0";
 
   return (
-    <div className="list-view-container summary-view-container">
-      <button
-        onClick={onBack}
-        style={{
-          border: "none",
-          background: "none",
-          color: "#2196f3",
-          cursor: "pointer",
-          fontSize: "1rem",
-          padding: "0",
-          marginBottom: "20px",
-        }}
-      >
-        ← Вернуться в архив
+    <div className="list-view">
+      <button className="btn btn--muted" onClick={onBack}>
+        ← Архив
       </button>
 
-      <header style={{ textAlign: "center", marginBottom: "30px" }}>
-        <h1 style={{ fontSize: "1.8rem", margin: "0 0 10px 0" }}>
-          {expedition.title}
-        </h1>
-        <p style={{ color: "#666", fontSize: "1.1rem", fontStyle: "italic" }}>
-          «{expedition.goal}»
-        </p>
-        <div
-          style={{
-            display: "inline-block",
-            backgroundColor: "#eee",
-            padding: "5px 15px",
-            borderRadius: "20px",
-            fontSize: "0.8rem",
-            color: "#888",
-          }}
-        >
-          {new Date(expedition.startTime).toLocaleDateString()} •{" "}
+      <header>
+        <h1 className="list-view__title">{expedition.title}</h1>
+        <p className="note">«{expedition.goal}»</p>
+        <p className="label">
+          {new Date(expedition.startTime).toLocaleDateString("ru-RU")} ·{" "}
           {calculateDuration()}
-        </div>
+        </p>
       </header>
 
-      <section
-        style={{
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "15px",
-          justifyContent: "space-around",
-          backgroundColor: "white",
-          padding: "20px",
-          borderRadius: "15px",
-          boxShadow: "0 2px 10px rgba(0,0,0,0.05)",
-          marginBottom: "30px",
-        }}
-      >
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: "1.5rem", fontWeight: "bold" }}>
-            {findings.length}
-          </div>
-          <div style={{ fontSize: "0.8rem", color: "#999" }}>Находок</div>
+      <section className="stats">
+        <div className="stats__cell">
+          <div className="stats__value">{findings.length}</div>
+          <div className="stats__label">Находок</div>
         </div>
 
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: "1.5rem", fontWeight: "bold" }}>
-            {totalDistance}
-          </div>
-          <div style={{ fontSize: "0.8rem", color: "#999" }}>км пути</div>
+        <div className="stats__cell">
+          <div className="stats__value">{distanceKm}</div>
+          <div className="stats__label">Км пути</div>
         </div>
 
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: "1.5rem", fontWeight: "bold" }}>
-            {averageSpeed}
-          </div>
-          <div style={{ fontSize: "0.8rem", color: "#999" }}>км/ч</div>
+        <div className="stats__cell">
+          <div className="stats__value">{averageSpeed}</div>
+          <div className="stats__label">Км/ч в движении</div>
         </div>
 
-        <div style={{ textAlign: "center" }}>
-          <div style={{ fontSize: "1.5rem", fontWeight: "bold" }}>
-            {isGoalReached ? "✅" : "❌"}
+        <div className="stats__cell">
+          <div
+            className={`stats__value ${isGoalReached ? "stats__value--accent" : ""}`}
+          >
+            {isGoalReached ? "да" : "нет"}
           </div>
-          <div style={{ fontSize: "0.8rem", color: "#999" }}>Цель</div>
+          <div className="stats__label">Цель</div>
         </div>
       </section>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "20px" }}>
-        <h2
-          style={{
-            fontSize: "1.2rem",
-            borderBottom: "2px solid #eee",
-            paddingBottom: "10px",
-          }}
-        >
-          Что было найдено:
-        </h2>
+      <section className="section">
+        <p className="section__label">Находки · {findings.length}</p>
 
         {findings.length === 0 ? (
-          <p style={{ textAlign: "center", color: "#aaa" }}>
-            Ничего не зафиксировано
-          </p>
+          <p className="empty-state">Ничего не зафиксировано.</p>
         ) : (
           findings.map((finding) => (
-            <div
-              key={finding.id}
-              style={{
-                backgroundColor: "white",
-                borderRadius: "15px",
-                overflow: "hidden",
-                boxShadow: "0 2px 5px rgba(0,0,0,0.05)",
-              }}
-            >
-              {finding.image && (
-                <img
-                  src={finding.image}
-                  alt="Находка"
-                  style={{ width: "100%", height: "auto", display: "block" }}
-                />
-              )}
-              <div style={{ padding: "15px" }}>
-                <div
-                  style={{
-                    fontSize: "0.8rem",
-                    color: "#aaa",
-                    marginBottom: "5px",
-                    display: "flex",
-                    justifyContent: "space-between",
-                  }}
-                >
-                  <span>
-                    {new Date(finding.timeStamp).toLocaleTimeString()}
-                  </span>
-                  {finding.isGoal && (
-                    <span style={{ color: "#4caf50", fontWeight: "bold" }}>
-                      ЦЕЛЬ!
-                    </span>
-                  )}
-                </div>
-                <div style={{ fontSize: "1rem", lineHeight: "1.4" }}>
-                  {finding.note}
-                </div>
+            <article className="finding" key={finding.id}>
+              <div className="finding__meta">
+                <span>
+                  {new Date(finding.timeStamp).toLocaleTimeString("ru-RU", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>
+                {finding.isGoal && <span className="finding__goal">цель</span>}
               </div>
-            </div>
+
+              {finding.image && (
+                <img className="finding__image" src={finding.image} alt="" />
+              )}
+
+              <p className="finding__note">{finding.note}</p>
+            </article>
           ))
         )}
-      </div>
+      </section>
     </div>
   );
 }
