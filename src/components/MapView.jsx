@@ -1,6 +1,7 @@
 import L from "leaflet";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  AttributionControl,
   MapContainer,
   TileLayer,
   Marker,
@@ -12,6 +13,21 @@ import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import { filterImplausiblePoints, splitRouteIntoSegments } from "../utils.js";
+
+// Ключ берётся из .env.development (localhost) или .env.production (Pages) — см. .env.example.
+const CARTO_API_KEY = import.meta.env.VITE_CARTO_API_KEY;
+const HAS_CARTO_KEY = Boolean(CARTO_API_KEY);
+
+const OSM_TILE_URL = "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png";
+const OSM_ATTRIBUTION =
+  '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors';
+const CARTO_ATTRIBUTION = `${OSM_ATTRIBUTION}, &copy; <a href="https://carto.com/attribution">CARTO</a>`;
+
+/** CARTO raster: light_nolabels — чистая карта, light_all — с подписями. */
+function buildCartoTileUrl(showLabels) {
+  const style = showLabels ? "light_all" : "light_nolabels";
+  return `https://basemaps.cartocdn.com/rastertiles/${style}/{z}/{x}/{y}{r}.png?key=${CARTO_API_KEY}`;
+}
 
 function MapCamera({
   position,
@@ -85,6 +101,8 @@ function MapView({
 }) {
   const mapRef = useRef(null);
   const clusterGroupRef = useRef(null);
+  // Подписи на карте выключены по умолчанию: чистая карта для исследования.
+  const [showLabels, setShowLabels] = useState(false);
 
   const routeSegments = useMemo(
     () =>
@@ -136,7 +154,7 @@ function MapView({
       marker.on("popupopen", () => marker.setIcon(buildIcon(finding, baseSize + 14)));
       marker.on("popupclose", () => marker.setIcon(buildIcon(finding, baseSize)));
 
-      const labelColor = finding.isGoal ? "#c7e36a" : "#999";
+      const labelColor = finding.isGoal ? "var(--accent)" : "#999";
 
       marker.bindPopup(`
         <div style="max-width: 230px;">
@@ -183,15 +201,19 @@ function MapView({
           zoom={15}
           maxZoom={18}
           zoomControl={false}
+          attributionControl={false}
           style={{
             height: "100%",
             width: "100%",
           }}
           ref={mapRef}
         >
+          {/* Подпись провайдера видимая, но без префикса Leaflet (там флаг). */}
+          <AttributionControl prefix={false} />
+
           <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+            url={HAS_CARTO_KEY ? buildCartoTileUrl(showLabels) : OSM_TILE_URL}
+            attribution={HAS_CARTO_KEY ? CARTO_ATTRIBUTION : OSM_ATTRIBUTION}
           />
 
           <Marker
@@ -230,6 +252,15 @@ function MapView({
           </button>
         ) : (
           <span className="map-chip map-chip--muted">Просмотр</span>
+        )}
+
+        {HAS_CARTO_KEY && (
+          <button
+            className="map-chip map-chip--muted"
+            onClick={() => setShowLabels((previous) => !previous)}
+          >
+            {showLabels ? "подписи вкл" : "подписи"}
+          </button>
         )}
 
         {isWalking && (

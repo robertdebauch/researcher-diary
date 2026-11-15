@@ -13,7 +13,7 @@
 
 ## Стек
 
-React 19, Vite 8, Dexie 4 (IndexedDB), Leaflet 1.9 + react-leaflet 5 + leaflet.markercluster. Стили — обычный CSS (`src/App.css`). Деплой — GitHub Pages (`gh-pages`).
+React 19, Vite 8, Dexie 4 (IndexedDB), Leaflet 1.9 + react-leaflet 5 + leaflet.markercluster. Карта — тайлы CARTO (`light_nolabels` / `light_all`, атрибуция показывается), при отсутствии ключа — OSM. Стили — обычный CSS (`src/App.css`). Деплой — GitHub Pages (`gh-pages`).
 
 ## Запуск
 

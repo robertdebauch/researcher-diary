@@ -33,7 +33,7 @@
   --ink-muted: #999;
   --ink-faint: #636362;
   --rule: rgba(255, 255, 255, 0.18);
-  --accent: #c7e36a;
+  --accent: #f43b00;
 
   --font-ui: "Geist", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -616,12 +616,22 @@ button {
 }
 
 /* ---------- Leaflet ---------- */
-/* Подпись карты скрыта ОСОЗНАННО (решение Роберта, D-9): Leaflet добавляет
-   в свой префикс флаг Украины — политический символ, неуместный в личном
-   приложении. Формально это расходится с ToS тайлов OSM; риск принят.
-   Если приложение станет публичным — вернуть через <AttributionControl prefix={false} />. */
+/* Подпись провайдера видимая — этого требуют условия CARTO/OSM.
+   Политический флаг живёт в префиксе Leaflet, поэтому он отключён
+   через <AttributionControl prefix={false} /> в MapView (см. D-27). */
 .leaflet-control-attribution {
-  display: none !important;
+  padding: 2px 6px;
+  background: rgba(0, 0, 0, 0.72) !important;
+  border: 1px solid var(--rule);
+  color: var(--ink-muted) !important;
+  font-family: var(--font-mono);
+  font-size: 10px !important;
+  letter-spacing: 0.04em;
+}
+
+.leaflet-control-attribution a {
+  color: var(--ink-muted) !important;
+  text-decoration: none;
 }
 
 .leaflet-container {
@@ -723,7 +733,7 @@ button {
 .marker-cluster-small,
 .marker-cluster-medium,
 .marker-cluster-large {
-  background: rgba(199, 227, 106, 0.18) !important;
+  background: rgba(244, 59, 0, 0.18) !important;
 }
 
 .marker-cluster-small div,
