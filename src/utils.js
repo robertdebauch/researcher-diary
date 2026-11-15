@@ -158,6 +158,31 @@ export function appendRoutePoint(route, coordinates) {
   return [...route, createRoutePoint(coordinates[0], coordinates[1])];
 }
 
+/** Русское склонение: 1 находка, 3 находки, 21 находка, 11 находок. */
+export function findingsNoun(count) {
+  const absolute = Math.abs(count) % 100;
+  const lastDigit = absolute % 10;
+
+  if (absolute > 10 && absolute < 20) {
+    return "находок";
+  }
+
+  if (lastDigit === 1) {
+    return "находка";
+  }
+
+  if (lastDigit >= 2 && lastDigit <= 4) {
+    return "находки";
+  }
+
+  return "находок";
+}
+
+/** Готовое сочетание числа и слова: «1 находка», «3 находки», «12 находок». */
+export function formatFindingsCount(count) {
+  return `${count} ${findingsNoun(count)}`;
+}
+
 export async function compressImage(file, maxWidth = 1200, quality = 0.7) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

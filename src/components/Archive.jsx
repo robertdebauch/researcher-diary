@@ -1,3 +1,5 @@
+import { formatFindingsCount } from "../utils";
+
 function Archive({
   expeditions,
   allFindings,
@@ -75,7 +77,7 @@ function Archive({
                   <span
                     className={`row__count ${expeditionFindings.length > 0 ? "" : "row__count--empty"}`}
                   >
-                    {expeditionFindings.length} находок
+                    {formatFindingsCount(expeditionFindings.length)}
                   </span>
                   <button
                     className="btn btn--muted"

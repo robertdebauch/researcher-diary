@@ -139,8 +139,8 @@ function App() {
       startTime: new Date(),
       endTime: null,
       path: [],
-      title: expeditionTitle || "Без названия",
-      goal: expeditionGoal || "Исследование",
+      title: expeditionTitle.trim() || "Без названия",
+      goal: expeditionGoal.trim() || "Исследование",
     };
 
     const id = await db.expeditions.add(newExpedition);
@@ -228,7 +228,7 @@ function App() {
     const newFinding = {
       position: position,
       timeStamp: new Date(),
-      note: findingNote,
+      note: findingNote.trim(),
       expeditionId: currentExpeditionId,
       image: findingImage,
       isGoal: isGoal,

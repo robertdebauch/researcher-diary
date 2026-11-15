@@ -1,4 +1,8 @@
-import { calculateRouteStats } from "../utils";
+import {
+  calculateRouteStats,
+  findingsNoun,
+  formatFindingsCount,
+} from "../utils";
 
 function SummaryView({ expedition, findings, onBack }) {
   // Отчёт могли открыть для экспедиции, которой уже нет в state — не роняем приложение.
@@ -57,7 +61,7 @@ function SummaryView({ expedition, findings, onBack }) {
       <section className="stats">
         <div className="stats__cell">
           <div className="stats__value">{findings.length}</div>
-          <div className="stats__label">Находок</div>
+          <div className="stats__label">{findingsNoun(findings.length)}</div>
         </div>
 
         <div className="stats__cell">
@@ -81,7 +85,9 @@ function SummaryView({ expedition, findings, onBack }) {
       </section>
 
       <section className="section">
-        <p className="section__label">Находки · {findings.length}</p>
+        <p className="section__label">
+          {formatFindingsCount(findings.length)}
+        </p>
 
         {findings.length === 0 ? (
           <p className="empty-state">Ничего не зафиксировано.</p>

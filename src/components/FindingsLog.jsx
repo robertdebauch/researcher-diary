@@ -1,10 +1,14 @@
+import { formatFindingsCount } from "../utils";
+
 function FindingsLog({ isOpen, findings, onClose, onDeleteFinding }) {
   return (
     <aside
       className={`findings-panel ${isOpen ? "" : "closed"}`}
       aria-hidden={!isOpen}
     >
-      <p className="section__label">Журнал · {findings.length}</p>
+      <p className="section__label">
+        Журнал · {formatFindingsCount(findings.length)}
+      </p>
       <h2 className="sheet__title">Находки</h2>
 
       <div className="findings-panel__list">
