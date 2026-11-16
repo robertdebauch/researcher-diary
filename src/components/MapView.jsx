@@ -12,7 +12,11 @@ import {
 import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
-import { filterImplausiblePoints, splitRouteIntoSegments } from "../utils.js";
+import {
+  filterImplausiblePoints,
+  simplifyPath,
+  splitRouteIntoSegments,
+} from "../utils.js";
 
 // Ключ берётся из .env.development (localhost) или .env.production (Pages) — см. .env.example.
 const CARTO_API_KEY = import.meta.env.VITE_CARTO_API_KEY;
@@ -108,6 +112,7 @@ function MapView({
     () =>
       splitRouteIntoSegments(route)
         .map((segment) => filterImplausiblePoints(segment))
+        .map((segment) => simplifyPath(segment))
         .filter((segment) => segment.length > 1),
     [route],
   );

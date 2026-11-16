@@ -9,6 +9,7 @@ import {
   calculateRouteStats,
   createRoutePoint,
   filterImplausiblePoints,
+  simplifyPath,
   splitRouteIntoSegments,
 } from "../src/utils.js";
 
@@ -22,6 +23,8 @@ const check = (name, actual, expected) => {
 
 const startTime = 1_700_000_000_000;
 const metersToLatitude = (meters) => meters / 111_320;
+const metersToLongitude = (meters, latitude = 55.75) =>
+  meters / (111_320 * Math.cos((latitude * Math.PI) / 180));
 const steadyPoint = (index) =>
   createRoutePoint(
     55.75 + metersToLatitude(7 * index),
@@ -104,6 +107,78 @@ check(
   Math.round(calculateDistance([0, 0], [1, 0]) / 1000),
   111,
 );
+
+// 6. Стоим на месте: микро-дрожь (1 м за 5 с = 0.72 км/ч) не считается движением.
+const jitterRoute = Array.from({ length: 11 }, (_, index) =>
+  createRoutePoint(
+    55.75 + metersToLatitude(index),
+    37.61,
+    startTime + index * 5000,
+  ),
+);
+const jitterStats = calculateRouteStats(jitterRoute);
+check("остановка: дистанция (км)", jitterStats.distanceKm, "0.00");
+check("остановка: время в движении (с)", jitterStats.movingMs / 1000, "0");
+
+// 7. Длинная пауза (5 минут между точками) — не движение, даже если смещение есть.
+const pausedRoute = [
+  createRoutePoint(55.75, 37.61, startTime),
+  createRoutePoint(55.75 + metersToLatitude(100), 37.61, startTime + 300000),
+];
+check("пауза: дистанция (км)", calculateRouteStats(pausedRoute).distanceKm, "0.00");
+check(
+  "пауза: время в движении (с)",
+  calculateRouteStats(pausedRoute).movingMs / 1000,
+  "0",
+);
+
+// 8. Короткий интервал движения считается как обычно: 30 м за 20 с.
+const shortGapRoute = [
+  createRoutePoint(55.75, 37.61, startTime),
+  createRoutePoint(55.75 + metersToLatitude(30), 37.61, startTime + 20000),
+];
+check(
+  "интервал 20 с: дистанция (км)",
+  calculateRouteStats(shortGapRoute).distanceKm,
+  "0.03",
+);
+check(
+  "интервал 20 с: время в движении (с)",
+  calculateRouteStats(shortGapRoute).movingMs / 1000,
+  "20",
+);
+
+// 9. Порог записи точки: ближе 3 м — шум, дальше — движение.
+const singlePointRoute = appendRoutePoint([], [55.75, 37.61]);
+check(
+  "шум 1 м не пишется",
+  appendRoutePoint(singlePointRoute, [55.75 + metersToLatitude(1), 37.61]).length,
+  1,
+);
+check(
+  "смещение 5 м пишется",
+  appendRoutePoint(singlePointRoute, [55.75 + metersToLatitude(5), 37.61]).length,
+  2,
+);
+
+// 10. Сглаживание: «пила» ±3 м вдоль прямой схлопывается, угол сохраняется.
+const zigzagRoute = Array.from({ length: 40 }, (_, index) =>
+  createRoutePoint(
+    55.75 + metersToLatitude(index * 10),
+    37.61 + (index % 2 === 0 ? 0 : metersToLongitude(3)),
+    startTime + index * 5000,
+  ),
+);
+check("сглаживание: пила схлопнута", simplifyPath(zigzagRoute).length, 2);
+
+const cornerRoute = Array.from({ length: 21 }, (_, index) =>
+  createRoutePoint(
+    55.75 + (index <= 10 ? 0 : metersToLatitude((index - 10) * 10)),
+    37.61 + metersToLongitude(Math.min(index, 10) * 10),
+    startTime + index * 5000,
+  ),
+);
+check("сглаживание: угол сохранён", simplifyPath(cornerRoute).length, 3);
 
 console.log(results.join("\n"));
 

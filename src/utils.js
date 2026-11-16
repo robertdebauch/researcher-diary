@@ -9,6 +9,24 @@ const LEGACY_POINT_INTERVAL_MS = 5000;
 // (восстановление сессии, потеря GPS) и рисуем маршрут отдельным сегментом.
 const TELEPORT_GAP_METERS = 200;
 
+// Считаем отрезок «движением», только если скорость выше порога: иначе это дрожь
+// GPS на месте (5–10 м за 5 секунд выглядят как 3–7 км/ч и портят среднюю скорость).
+const MIN_MOVEMENT_SPEED_KMPH = 1;
+
+// Если между точками прошло больше этого времени, считаем, что была пауза
+// (фон, потеря сигнала): дистанция и время такого отрезка в статистику не идут.
+const MAX_SAMPLE_GAP_MS = 30000;
+
+// Не пишем точку, если она ближе этого расстояния к предыдущей — это шум приёма,
+// а не перемещение. Заодно уменьшает «пилу» на линии.
+const MIN_POINT_DISTANCE_METERS = 3;
+
+// Точки с погрешностью больше этого значения не пишем в маршрут (дома, начало трека).
+export const MAX_ACCURACY_METERS = 30;
+
+// Допуск упрощения линии при отрисовке: 4–5 м убирает дрожание, сохраняя форму улицы.
+const SIMPLIFY_TOLERANCE_METERS = 4;
+
 // Как часто сбрасывать маршрут в IndexedDB. Раньше массив перезаписывался целиком
 // каждые 5 секунд — на длинной прогулке это O(n²) по объёму записи.
 export const ROUTE_SAVE_INTERVAL_MS = 20000;
@@ -67,8 +85,29 @@ function isPlausibleSegment(point1, point2) {
 }
 
 /**
+ * Отрезок считается движением, если человек действительно шёл:
+ * скорость в разумных пределах и между точками нет длинной паузы.
+ */
+function isMovementSegment(point1, point2) {
+  const elapsedMs = resolveElapsedMs(point1, point2);
+
+  if (elapsedMs <= 0 || elapsedMs > MAX_SAMPLE_GAP_MS) {
+    return false;
+  }
+
+  const distanceMeters = calculateDistance(point1, point2);
+  const speedKmph = (distanceMeters * 3600) / elapsedMs;
+
+  return (
+    speedKmph >= MIN_MOVEMENT_SPEED_KMPH &&
+    speedKmph <= MAX_WALKING_SPEED_KMPH
+  );
+}
+
+/**
  * Дистанция и время в движении по маршруту.
- * Отрезки с неправдоподобной скоростью (дрейф GPS) в расчёт не идут.
+ * В расчёт идут только отрезки реального движения: дрожь на месте и паузы
+ * (долгие разрывы между точками) не раздувают ни дистанцию, ни время.
  */
 export function calculateRouteStats(path) {
   if (!path || path.length < 2) {
@@ -82,7 +121,7 @@ export function calculateRouteStats(path) {
     const startPoint = path[i];
     const endPoint = path[i + 1];
 
-    if (!isPlausibleSegment(startPoint, endPoint)) {
+    if (!isMovementSegment(startPoint, endPoint)) {
       continue;
     }
 
@@ -143,19 +182,86 @@ export function filterImplausiblePoints(points) {
   return filtered;
 }
 
-/** Добавляет точку в маршрут, пропуская повторы координат (стоим на месте). */
+/** Добавляет точку в маршрут, пропуская шум: слишком близкие точки не пишем. */
 export function appendRoutePoint(route, coordinates) {
   const lastPoint = route[route.length - 1];
 
   if (
     lastPoint &&
-    lastPoint[0] === coordinates[0] &&
-    lastPoint[1] === coordinates[1]
+    calculateDistance(lastPoint, coordinates) < MIN_POINT_DISTANCE_METERS
   ) {
     return route;
   }
 
   return [...route, createRoutePoint(coordinates[0], coordinates[1])];
+}
+
+/** Расстояние от точки до отрезка в метрах (локальная равнопромежуточная проекция). */
+function pointToSegmentDistanceMeters(point, segmentStart, segmentEnd) {
+  const latitudeRef =
+    (((segmentStart[0] + segmentEnd[0]) / 2) * Math.PI) / 180;
+  const metersPerDegreeLatitude = 110540;
+  const metersPerDegreeLongitude = 111320 * Math.cos(latitudeRef);
+
+  const toLocal = (value) => [
+    (value[1] - segmentStart[1]) * metersPerDegreeLongitude,
+    (value[0] - segmentStart[0]) * metersPerDegreeLatitude,
+  ];
+
+  const [pointX, pointY] = toLocal(point);
+  const [endX, endY] = toLocal(segmentEnd);
+
+  const lengthSquared = endX * endX + endY * endY;
+
+  let projection = 0;
+
+  if (lengthSquared > 0) {
+    projection = (pointX * endX + pointY * endY) / lengthSquared;
+    projection = Math.max(0, Math.min(1, projection));
+  }
+
+  const nearestX = projection * endX;
+  const nearestY = projection * endY;
+
+  return Math.hypot(pointX - nearestX, pointY - nearestY);
+}
+
+/**
+ * Упрощение линии алгоритмом Дугласа–Пекера (для отрисовки).
+ * Убирает дрожание GPS, сохраняя форму маршрута; исходные точки не меняются.
+ */
+export function simplifyPath(points, toleranceMeters = SIMPLIFY_TOLERANCE_METERS) {
+  if (!points || points.length < 3) {
+    return points ?? [];
+  }
+
+  const firstPoint = points[0];
+  const lastPoint = points[points.length - 1];
+
+  let maxDistance = -1;
+  let farthestIndex = -1;
+
+  for (let i = 1; i < points.length - 1; i++) {
+    const distance = pointToSegmentDistanceMeters(
+      points[i],
+      firstPoint,
+      lastPoint,
+    );
+
+    if (distance > maxDistance) {
+      maxDistance = distance;
+      farthestIndex = i;
+    }
+  }
+
+  if (maxDistance > toleranceMeters) {
+    const left = simplifyPath(points.slice(0, farthestIndex + 1), toleranceMeters);
+    const right = simplifyPath(points.slice(farthestIndex), toleranceMeters);
+
+    return [...left.slice(0, -1), ...right];
+  }
+
+  return [firstPoint, lastPoint];
 }
 
 /** Русское склонение: 1 находка, 3 находки, 21 находка, 11 находок. */

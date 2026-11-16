@@ -14,6 +14,7 @@ import { db, clearAllData, exportAllData, importAllData } from "./db";
 import {
   compressImage,
   appendRoutePoint,
+  MAX_ACCURACY_METERS,
   ROUTE_SAVE_INTERVAL_MS,
 } from "./utils.js";
 
@@ -102,10 +103,12 @@ function App() {
   const updatePosition = useCallback(
     (pos) => {
       const coordinates = [pos.coords.latitude, pos.coords.longitude];
+      const accuracy = pos.coords.accuracy ?? 0;
       setPosition(coordinates);
 
-      if (isWalking) {
-        // Точка маршрута хранит время: без него скорость приходится считать по догадке.
+      // Неточные точки (дома, в начале трека, в подворотне) не пишем в маршрут:
+      // они дают те самые «броски» линии через полкарты.
+      if (isWalking && accuracy <= MAX_ACCURACY_METERS) {
         setRoute((prevRoute) => appendRoutePoint(prevRoute, coordinates));
       }
     },
