@@ -23,6 +23,7 @@ function FindingModal({
   image,
   onImageChange,
   onOpenSettings,
+  settingsRevision,
 }) {
   const [apiKey, setApiKey] = useState("");
   const [consent, setConsent] = useState(false);
@@ -66,7 +67,7 @@ function FindingModal({
     return () => {
       isCancelled = true;
     };
-  }, [isOpen]);
+  }, [isOpen, settingsRevision]);
 
   // Проверка региона до отправки фото: лёгкий запрос списка моделей.
   useEffect(() => {

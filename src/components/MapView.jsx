@@ -13,6 +13,7 @@ import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import {
+  escapeHtml,
   filterImplausiblePoints,
   getFindingDescription,
   getFindingName,
@@ -162,8 +163,8 @@ function MapView({
       marker.on("popupclose", () => marker.setIcon(buildIcon(finding, baseSize)));
 
       const labelColor = finding.isGoal ? "var(--accent)" : "#999";
-      const findingName = getFindingName(finding) || "Находка";
-      const findingDescription = getFindingDescription(finding);
+      const findingName = escapeHtml(getFindingName(finding) || "Находка");
+      const findingDescription = escapeHtml(getFindingDescription(finding));
 
       marker.bindPopup(`
         <div style="max-width: 230px;">

@@ -306,6 +306,15 @@ export function getFindingDescription(finding) {
   return finding?.name ? "" : finding?.note ?? "";
 }
 
+/** Экранирование текста для HTML-строки попапа Leaflet. */
+export function escapeHtml(value) {
+  return String(value ?? "")
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
 export async function compressImage(file, maxWidth = 1200, quality = 0.7) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

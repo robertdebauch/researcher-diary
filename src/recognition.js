@@ -37,6 +37,8 @@ export async function getApiKey() {
 
 export async function saveApiKey(value) {
   await setSetting("geminiApiKey", value.trim());
+  // Ключ сменили — старый вердикт проверки (например, «ключ не подошёл») больше не верен.
+  availabilityCache = null;
 }
 
 export async function getConsent() {

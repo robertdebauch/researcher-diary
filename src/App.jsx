@@ -31,6 +31,7 @@ function App() {
   const [findingName, setFindingName] = useState("");
   const [findingDescription, setFindingDescription] = useState("");
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [settingsRevision, setSettingsRevision] = useState(0);
   const [view, setView] = useState("archive");
   const [expeditions, setExpeditions] = useState([]);
   const [isStartModalOpen, setIsStartModalOpen] = useState(false);
@@ -48,6 +49,12 @@ function App() {
     () => setIsFollowEnabled((prevEnabled) => !prevEnabled),
     [],
   );
+
+  // Лист находки читает ключ при открытии: после настроек ему нужна свежая версия.
+  const closeSettings = useCallback(() => {
+    setIsSettingsOpen(false);
+    setSettingsRevision((revision) => revision + 1);
+  }, []);
 
   useEffect(() => {
     async function loadData() {
@@ -523,6 +530,7 @@ function App() {
         isGoal={isGoal}
         setIsGoal={setIsGoal}
         onOpenSettings={() => setIsSettingsOpen(true)}
+        settingsRevision={settingsRevision}
       />
       <StartExpeditionModal
         isOpen={isStartModalOpen}
@@ -535,7 +543,7 @@ function App() {
       />
       <SettingsSheet
         isOpen={isSettingsOpen}
-        onClose={() => setIsSettingsOpen(false)}
+        onClose={closeSettings}
       />
     </div>
   );
