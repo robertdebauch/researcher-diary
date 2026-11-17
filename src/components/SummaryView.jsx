@@ -2,6 +2,8 @@ import {
   calculateRouteStats,
   findingsNoun,
   formatFindingsCount,
+  getFindingDescription,
+  getFindingName,
 } from "../utils";
 
 function SummaryView({ expedition, findings, onBack }) {
@@ -108,7 +110,15 @@ function SummaryView({ expedition, findings, onBack }) {
                 <img className="finding__image" src={finding.image} alt="" />
               )}
 
-              <p className="finding__note">{finding.note}</p>
+              {getFindingName(finding) && (
+                <h4 className="finding__name">{getFindingName(finding)}</h4>
+              )}
+
+              {getFindingDescription(finding) && (
+                <p className="finding__note">
+                  {getFindingDescription(finding)}
+                </p>
+              )}
             </article>
           ))
         )}

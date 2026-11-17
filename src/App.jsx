@@ -2,6 +2,7 @@ import Archive from "./components/Archive";
 import MapView from "./components/MapView";
 import FindingModal from "./components/FindingModal";
 import FindingsLog from "./components/FindingsLog";
+import SettingsSheet from "./components/SettingsSheet";
 import StartExpeditionModal from "./components/StartExpeditionModal";
 import SummaryView from "./components/SummaryView";
 
@@ -27,7 +28,9 @@ function App() {
   const [currentExpeditionId, setCurrentExpeditionId] = useState(null);
   const [isLogOpen, setIsLogOpen] = useState(false);
   const [isAddingFinding, setIsAddingFinding] = useState(false);
-  const [findingNote, setFindingNote] = useState("");
+  const [findingName, setFindingName] = useState("");
+  const [findingDescription, setFindingDescription] = useState("");
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [view, setView] = useState("archive");
   const [expeditions, setExpeditions] = useState([]);
   const [isStartModalOpen, setIsStartModalOpen] = useState(false);
@@ -218,20 +221,25 @@ function App() {
       alert("Сначала нужно определить ваше местоположение");
       return;
     }
-    setFindingNote("");
+    setFindingName("");
+    setFindingDescription("");
     setIsAddingFinding(true);
   };
 
   const saveFinding = async () => {
-    if (!findingNote.trim()) {
-      alert("Пожалуйста, напишите что-то");
+    const trimmedName = findingName.trim();
+    const trimmedDescription = findingDescription.trim();
+
+    if (!trimmedName && !trimmedDescription) {
+      alert("Добавьте название или описание");
       return;
     }
 
     const newFinding = {
       position: position,
       timeStamp: new Date(),
-      note: findingNote.trim(),
+      name: trimmedName,
+      description: trimmedDescription,
       expeditionId: currentExpeditionId,
       image: findingImage,
       isGoal: isGoal,
@@ -248,7 +256,8 @@ function App() {
 
       // СБРОС состояний после сохранения
       setIsAddingFinding(false);
-      setFindingNote("");
+      setFindingName("");
+      setFindingDescription("");
       setFindingImage(null);
       setIsGoal(false);
 
@@ -462,6 +471,7 @@ function App() {
           onOpenSummary={openSummary}
           onExport={handleExport}
           onImport={handleImport}
+          onOpenSettings={() => setIsSettingsOpen(true)}
         />
       ) : view === "summary" ? (
         <SummaryView
@@ -502,14 +512,17 @@ function App() {
       )}
       <FindingModal
         isOpen={isAddingFinding}
-        note={findingNote}
-        setNote={setFindingNote}
+        name={findingName}
+        setName={setFindingName}
+        description={findingDescription}
+        setDescription={setFindingDescription}
         onSave={saveFinding}
         onClose={() => setIsAddingFinding(false)}
         image={findingImage}
         onImageChange={handleImageChange}
         isGoal={isGoal}
         setIsGoal={setIsGoal}
+        onOpenSettings={() => setIsSettingsOpen(true)}
       />
       <StartExpeditionModal
         isOpen={isStartModalOpen}
@@ -519,6 +532,10 @@ function App() {
         setGoal={setExpeditionGoal}
         onStart={startExpedition}
         onClose={() => setIsStartModalOpen(false)}
+      />
+      <SettingsSheet
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
       />
     </div>
   );

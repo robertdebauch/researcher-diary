@@ -14,6 +14,8 @@ import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import {
   filterImplausiblePoints,
+  getFindingDescription,
+  getFindingName,
   simplifyPath,
   splitRouteIntoSegments,
 } from "../utils.js";
@@ -160,13 +162,16 @@ function MapView({
       marker.on("popupclose", () => marker.setIcon(buildIcon(finding, baseSize)));
 
       const labelColor = finding.isGoal ? "var(--accent)" : "#999";
+      const findingName = getFindingName(finding) || "Находка";
+      const findingDescription = getFindingDescription(finding);
 
       marker.bindPopup(`
         <div style="max-width: 230px;">
           ${finding.image ? `<img src="${finding.image}" style="display: block; width: 100%;" />` : ""}
           <div style="padding: 10px 12px 12px;">
             <div style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: ${labelColor}; margin-bottom: 6px;">${finding.isGoal ? "цель найдена" : "находка"}</div>
-            <div style="font-family: var(--font-note); font-style: italic; font-size: 15px; line-height: 1.4; color: #fff;">${finding.note}</div>
+            <div style="font-family: var(--font-ui); font-size: 15px; font-weight: 500; line-height: 1.3; color: #fff;">${findingName}</div>
+            ${findingDescription ? `<div style="margin-top: 6px; font-family: var(--font-note); font-style: italic; font-size: 14px; line-height: 1.4; color: #b4b4b4;">${findingDescription}</div>` : ""}
             <div style="margin-top: 8px; font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.04em; color: #636362;">${new Date(finding.timeStamp).toLocaleString()}</div>
           </div>
         </div>

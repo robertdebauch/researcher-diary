@@ -289,6 +289,23 @@ export function formatFindingsCount(count) {
   return `${count} ${findingsNoun(count)}`;
 }
 
+/**
+ * Название находки. Старые записи хранили только note — читаем его как название,
+ * чтобы архив и карта не показывали пустые заголовки.
+ */
+export function getFindingName(finding) {
+  return finding?.name?.trim() || finding?.note?.trim() || "";
+}
+
+/** Описание находки: новое поле description, у старых записей его нет. */
+export function getFindingDescription(finding) {
+  if (finding?.description?.trim()) {
+    return finding.description.trim();
+  }
+
+  return finding?.name ? "" : finding?.note ?? "";
+}
+
 export async function compressImage(file, maxWidth = 1200, quality = 0.7) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();

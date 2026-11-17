@@ -1,4 +1,4 @@
-import { formatFindingsCount } from "../utils";
+import { formatFindingsCount, getFindingDescription, getFindingName } from "../utils";
 
 function FindingsLog({ isOpen, findings, onClose, onDeleteFinding }) {
   return (
@@ -40,7 +40,15 @@ function FindingsLog({ isOpen, findings, onClose, onDeleteFinding }) {
                   />
                 )}
 
-                <p className="finding-item__note">{finding.note}</p>
+                <p className="finding-item__name">
+                  {getFindingName(finding) || "Находка"}
+                </p>
+
+                {getFindingDescription(finding) && (
+                  <p className="finding-item__note">
+                    {getFindingDescription(finding)}
+                  </p>
+                )}
 
                 <button
                   className="btn btn--muted btn--danger"

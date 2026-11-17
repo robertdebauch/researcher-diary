@@ -7,6 +7,22 @@ db.version(1).stores({
   findings: "++id, expeditionId, timeStamp",
 });
 
+// v2: настройки (ключ распознавания, согласие, квота) и кэш распознаваний.
+db.version(2).stores({
+  settings: "key",
+  recognitionCache: "hash",
+});
+
+/** Настройки — простые пары ключ/значение (ключ Gemini, согласие, квота). */
+export async function getSetting(key) {
+  const row = await db.settings.get(key);
+  return row ? row.value : null;
+}
+
+export async function setSetting(key, value) {
+  await db.settings.put({ key, value });
+}
+
 /** Версия формата бэкапа, которую умеет читать текущая сборка. */
 const BACKUP_FORMAT_VERSION = 1;
 

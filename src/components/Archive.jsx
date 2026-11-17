@@ -10,6 +10,7 @@ function Archive({
   onOpenSummary,
   onExport,
   onImport,
+  onOpenSettings,
 }) {
   const formatStartTime = (value) =>
     new Date(value).toLocaleString("ru-RU", {
@@ -116,6 +117,10 @@ function Archive({
               className="visually-hidden"
             />
           </label>
+
+          <button className="btn" onClick={onOpenSettings}>
+            Распознавание
+          </button>
         </div>
 
         {expeditions.length > 0 && (
