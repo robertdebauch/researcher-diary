@@ -1,7 +1,6 @@
 import {
   calculateRouteStats,
   findingsNoun,
-  formatFindingsCount,
   getFindingDescription,
   getFindingName,
 } from "../utils";
@@ -87,9 +86,8 @@ function SummaryView({ expedition, findings, onBack }) {
       </section>
 
       <section className="section">
-        <p className="section__label">
-          {formatFindingsCount(findings.length)}
-        </p>
+        {/* Число находок уже стоит в «выборке» — здесь только название раздела. */}
+        <p className="section__label">Находки</p>
 
         {findings.length === 0 ? (
           <p className="empty-state">Ничего не зафиксировано.</p>
