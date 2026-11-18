@@ -22,6 +22,7 @@ import {
 function App() {
   const [position, setPosition] = useState(null);
   const [isWalking, setIsWalking] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [route, setRoute] = useState([]);
   const [findings, setFindings] = useState([]);
   const [allFindingsInDB, setAllFindingsInDB] = useState([]);
@@ -73,6 +74,7 @@ function App() {
         setCurrentExpeditionId(activeExpedition.id);
         setRoute(activeExpedition.path || []);
         setIsWalking(true);
+        setIsPaused(false);
         setIsFollowEnabled(true);
         setView("map");
 
@@ -103,6 +105,7 @@ function App() {
 
     setView("map");
     setIsWalking(false);
+    setIsPaused(false);
   };
 
   const openSummary = (expeditionId) => {
@@ -118,11 +121,11 @@ function App() {
 
       // Неточные точки (дома, в начале трека, в подворотне) не пишем в маршрут:
       // они дают те самые «броски» линии через полкарты.
-      if (isWalking && accuracy <= MAX_ACCURACY_METERS) {
+      if (isWalking && !isPaused && accuracy <= MAX_ACCURACY_METERS) {
         setRoute((prevRoute) => appendRoutePoint(prevRoute, coordinates));
       }
     },
-    [isWalking],
+    [isWalking, isPaused],
   );
 
   const startExpedition = async () => {
@@ -142,6 +145,7 @@ function App() {
       setRoute(activeExpedition.path || []);
       setFindings(activeFindings);
       setIsWalking(true);
+      setIsPaused(false);
       setIsFollowEnabled(true);
       setIsStartModalOpen(false);
       setView("map");
@@ -169,6 +173,7 @@ function App() {
     setRoute([]);
     setFindings([]);
     setIsWalking(true);
+    setIsPaused(false);
     setIsFollowEnabled(true);
     setIsStartModalOpen(false);
     setExpeditionTitle("");
@@ -176,35 +181,87 @@ function App() {
     setView("map");
   };
 
-  const toggleWalking = async () => {
-    if (!isWalking) {
-      if (currentExpeditionId) {
-        setIsWalking(true);
-      } else {
-        setIsStartModalOpen(true);
-      }
-    } else {
-      if (currentExpeditionId) {
-        const endTime = new Date();
-
-        await db.expeditions.update(currentExpeditionId, {
-          endTime,
-          path: route,
-        });
-
-        // Синхронизируем state: иначе в архиве у этой прогулки не будет
-        // endTime (отчёт покажет «Неизвестно») и последних точек маршрута.
-        setExpeditions((prevExpeditions) =>
-          prevExpeditions.map((expedition) =>
-            expedition.id === currentExpeditionId
-              ? { ...expedition, endTime, path: route }
-              : expedition,
-          ),
-        );
-      }
-      setIsWalking(false);
-      setCurrentExpeditionId(null);
+  // Старт с карты: либо продолжаем активную экспедицию, либо заводим новую.
+  const startWalk = () => {
+    if (currentExpeditionId) {
+      setIsWalking(true);
+      setIsPaused(false);
+      setIsFollowEnabled(true);
+      return;
     }
+
+    setIsStartModalOpen(true);
+  };
+
+  // Пауза не закрывает экспедицию: точки перестают писаться, время не идёт,
+  // находку всё равно можно зафиксировать.
+  const pauseWalk = () => {
+    setIsPaused(true);
+
+    if (currentExpeditionId) {
+      // Пауза — естественная граница записи, не ждём окна троттлинга.
+      db.expeditions.update(currentExpeditionId, { path: route });
+    }
+  };
+
+  const resumeWalk = () => {
+    setIsPaused(false);
+    setIsFollowEnabled(true);
+  };
+
+  const finishWalk = async () => {
+    if (currentExpeditionId) {
+      const endTime = new Date();
+
+      await db.expeditions.update(currentExpeditionId, {
+        endTime,
+        path: route,
+      });
+
+      setExpeditions((prevExpeditions) =>
+        prevExpeditions.map((expedition) =>
+          expedition.id === currentExpeditionId
+            ? { ...expedition, endTime, path: route }
+            : expedition,
+        ),
+      );
+    }
+
+    setIsWalking(false);
+    setIsPaused(false);
+    setCurrentExpeditionId(null);
+  };
+
+  // Продолжить завершённую: снимаем endTime, трекинг включается, линия
+  // продолжается новым сегментом (разрыв по времени рисуется как разрыв).
+  const resumeExpedition = async (expeditionId) => {
+    const expedition = expeditions.find((item) => item.id === expeditionId);
+
+    if (!expedition) {
+      return;
+    }
+
+    await db.expeditions.update(expeditionId, { endTime: null });
+
+    setExpeditions((prevExpeditions) =>
+      prevExpeditions.map((item) =>
+        item.id === expeditionId ? { ...item, endTime: null } : item,
+      ),
+    );
+
+    const resumedFindings = await db.findings
+      .where("expeditionId")
+      .equals(expeditionId)
+      .toArray();
+
+    setCurrentExpeditionId(expeditionId);
+    setRoute(expedition.path || []);
+    setFindings(resumedFindings);
+    setIsWalking(true);
+    setIsPaused(false);
+    setIsFollowEnabled(true);
+    setIsLogOpen(false);
+    setView("map");
   };
 
   const handleImageChange = async (e) => {
@@ -337,6 +394,7 @@ function App() {
         setRoute([]);
         setCurrentExpeditionId(null);
         setIsWalking(false);
+        setIsPaused(false);
         setView("archive");
 
         alert("Все данные успешно удалены!");
@@ -453,7 +511,7 @@ function App() {
     );
 
     let timer;
-    if (isWalking) {
+    if (isWalking && !isPaused) {
       timer = setInterval(() => {
         navigator.geolocation.getCurrentPosition(updatePosition, null, {
           enableHighAccuracy: true,
@@ -461,7 +519,7 @@ function App() {
       }, 5000);
     }
     return () => clearInterval(timer);
-  }, [isWalking, updatePosition]);
+  }, [isWalking, isPaused, updatePosition]);
 
   return (
     <div className="app-container">
@@ -489,6 +547,7 @@ function App() {
             (finding) => finding.expeditionId === summaryExpeditionId,
           )}
           onBack={() => setView("archive")}
+          onResume={resumeExpedition}
         />
       ) : (
         <div className="map-view-container">
@@ -500,7 +559,11 @@ function App() {
             route={route}
             findings={findings}
             isWalking={isWalking}
-            toggleWalking={toggleWalking}
+            isPaused={isPaused}
+            onStart={startWalk}
+            onPause={pauseWalk}
+            onResume={resumeWalk}
+            onFinish={finishWalk}
             addFinding={addFinding}
             isLogOpen={isLogOpen}
             setIsLogOpen={setIsLogOpen}

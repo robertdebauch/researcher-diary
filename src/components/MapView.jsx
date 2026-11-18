@@ -97,7 +97,11 @@ function MapView({
   route,
   findings,
   isWalking,
-  toggleWalking,
+  isPaused,
+  onStart,
+  onPause,
+  onResume,
+  onFinish,
   addFinding,
   isLogOpen,
   setIsLogOpen,
@@ -257,12 +261,24 @@ function MapView({
       )}
 
       <div className="map-bottom">
-        {isWalking || !currentExpeditionId ? (
-          <button className="map-chip" onClick={toggleWalking}>
-            {isWalking ? "Остановить" : "Начать прогулку"}
-          </button>
-        ) : (
+        {isWalking ? (
+          <div className="map-actions">
+            <button className="map-chip" onClick={onFinish}>
+              Остановить
+            </button>
+            <button
+              className="map-chip map-chip--muted"
+              onClick={isPaused ? onResume : onPause}
+            >
+              {isPaused ? "Продолжить" : "Пауза"}
+            </button>
+          </div>
+        ) : currentExpeditionId ? (
           <span className="map-chip map-chip--muted">Просмотр</span>
+        ) : (
+          <button className="map-chip" onClick={onStart}>
+            Начать прогулку
+          </button>
         )}
 
         {HAS_CARTO_KEY && (

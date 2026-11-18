@@ -383,6 +383,13 @@ button {
 }
 
 /* ---------- Отчёт ---------- */
+.report-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
 .stats {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -533,6 +540,12 @@ button {
 
 .map-bottom > * {
   pointer-events: auto;
+}
+
+/* Служебные действия во время прогулки: стоп и пауза рядом, не разъезжаются. */
+.map-actions {
+  display: flex;
+  gap: 8px;
 }
 
 .geo-waiting {

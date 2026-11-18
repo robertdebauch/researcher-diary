@@ -180,6 +180,45 @@ const cornerRoute = Array.from({ length: 21 }, (_, index) =>
 );
 check("сглаживание: угол сохранён", simplifyPath(cornerRoute).length, 3);
 
+// 11. Пауза рвёт линию: 5 минут между точками — это не путь по прямой.
+const pauseGapRoute = [
+  createRoutePoint(55.75, 37.61, startTime),
+  createRoutePoint(55.75 + metersToLatitude(7), 37.61, startTime + 5000),
+  createRoutePoint(55.76, 37.62, startTime + 5000 + 300000),
+  createRoutePoint(55.76 + metersToLatitude(7), 37.62, startTime + 10000 + 300000),
+];
+check(
+  "пауза: на карте две отдельные линии",
+  splitRouteIntoSegments(pauseGapRoute).filter((segment) => segment.length > 1).length,
+  2,
+);
+check(
+  "пауза: дистанция через паузу не считается (км)",
+  calculateRouteStats(pauseGapRoute).distanceKm,
+  "0.01",
+);
+
+// 12. Короткий разрыв (минута) линию не рвёт: так выглядит троттлинг в фоне.
+const shortBackgroundGapRoute = Array.from({ length: 4 }, (_, index) =>
+  createRoutePoint(
+    55.75 + metersToLatitude(index * 7),
+    37.61,
+    startTime + index * 60000,
+  ),
+);
+check(
+  "фон 60 с: линия остаётся целой",
+  splitRouteIntoSegments(shortBackgroundGapRoute).length,
+  1,
+);
+
+// 13. Легаси-точки без времени не рвутся по времени (у них его просто нет).
+check(
+  "легаси-маршрут без времени: одна линия",
+  splitRouteIntoSegments(legacyRoute).length,
+  1,
+);
+
 console.log(results.join("\n"));
 
 if (results.some((line) => line.startsWith("FAIL"))) {

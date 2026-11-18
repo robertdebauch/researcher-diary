@@ -9,6 +9,11 @@ const LEGACY_POINT_INTERVAL_MS = 5000;
 // (восстановление сессии, потеря GPS) и рисуем маршрут отдельным сегментом.
 const TELEPORT_GAP_METERS = 200;
 
+// Разрыв во времени, после которого линия рвётся: пауза, уход в фон, потеря GPS.
+// Статистика режет отрезки строже (30 с), но для рисования порог выше: иначе
+// браузер, троттлящий геолокацию в фоне, рвёт линию на куски каждую минуту.
+const SEGMENT_GAP_MS = 180000;
+
 // Считаем отрезок «движением», только если скорость выше порога: иначе это дрожь
 // GPS на месте (5–10 м за 5 секунд выглядят как 3–7 км/ч и портят среднюю скорость).
 const MIN_MOVEMENT_SPEED_KMPH = 1;
@@ -84,6 +89,18 @@ function isPlausibleSegment(point1, point2) {
   return speedKmph <= MAX_WALKING_SPEED_KMPH;
 }
 
+/** Между точками прошло слишком много времени — это пауза, а не пройденный путь. */
+function isTimeGap(point1, point2) {
+  const startTime = getPointTimestamp(point1);
+  const endTime = getPointTimestamp(point2);
+
+  if (startTime === null || endTime === null) {
+    return false;
+  }
+
+  return endTime - startTime > SEGMENT_GAP_MS;
+}
+
 /**
  * Отрезок считается движением, если человек действительно шёл:
  * скорость в разумных пределах и между точками нет длинной паузы.
@@ -150,6 +167,14 @@ export function splitRouteIntoSegments(path) {
   for (let i = 1; i < path.length; i++) {
     const previousPoint = path[i - 1];
     const point = path[i];
+
+    // Пауза — тоже разрыв: без этого линия соединила бы точки по прямой,
+    // хотя человек в это время стоял на месте или ехал в транспорте.
+    if (isTimeGap(previousPoint, point)) {
+      segments.push([point]);
+      continue;
+    }
+
     const gapMeters = calculateDistance(previousPoint, point);
 
     if (gapMeters > TELEPORT_GAP_METERS && !isPlausibleSegment(previousPoint, point)) {
