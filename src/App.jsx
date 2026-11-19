@@ -15,6 +15,7 @@ import { db, clearAllData, exportAllData, importAllData } from "./db";
 import {
   compressImage,
   appendRoutePoint,
+  isResumableExpedition,
   MAX_ACCURACY_METERS,
   ROUTE_SAVE_INTERVAL_MS,
 } from "./utils.js";
@@ -237,7 +238,7 @@ function App() {
   const resumeExpedition = async (expeditionId) => {
     const expedition = expeditions.find((item) => item.id === expeditionId);
 
-    if (!expedition) {
+    if (!expedition || !isResumableExpedition(expedition, expeditions)) {
       return;
     }
 
@@ -521,6 +522,15 @@ function App() {
     return () => clearInterval(timer);
   }, [isWalking, isPaused, updatePosition]);
 
+  const summaryExpedition = expeditions.find(
+    (expedition) => expedition.id === summaryExpeditionId,
+  );
+  // Кнопка «Продолжить» — только у последней и недавно завершённой прогулки.
+  const canResumeSummary = isResumableExpedition(
+    summaryExpedition,
+    expeditions,
+  );
+
   return (
     <div className="app-container">
       {" "}
@@ -540,14 +550,13 @@ function App() {
         />
       ) : view === "summary" ? (
         <SummaryView
-          expedition={expeditions.find(
-            (expedition) => expedition.id === summaryExpeditionId,
-          )}
+          expedition={summaryExpedition}
           findings={allFindingsInDB.filter(
             (finding) => finding.expeditionId === summaryExpeditionId,
           )}
           onBack={() => setView("archive")}
           onResume={resumeExpedition}
+          canResume={canResumeSummary}
         />
       ) : (
         <div className="map-view-container">

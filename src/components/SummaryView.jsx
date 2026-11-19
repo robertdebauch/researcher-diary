@@ -5,7 +5,7 @@ import {
   getFindingName,
 } from "../utils";
 
-function SummaryView({ expedition, findings, onBack, onResume }) {
+function SummaryView({ expedition, findings, onBack, onResume, canResume }) {
   // Отчёт могли открыть для экспедиции, которой уже нет в state — не роняем приложение.
   if (!expedition) {
     return (
@@ -51,7 +51,7 @@ function SummaryView({ expedition, findings, onBack, onResume }) {
           ← Архив
         </button>
 
-        {expedition.endTime && (
+        {canResume && (
           <button className="btn" onClick={() => onResume(expedition.id)}>
             Продолжить
           </button>

@@ -9,6 +9,8 @@ import {
   calculateRouteStats,
   createRoutePoint,
   filterImplausiblePoints,
+  isResumableExpedition,
+  RESUME_WINDOW_MS,
   simplifyPath,
   splitRouteIntoSegments,
 } from "../src/utils.js";
@@ -217,6 +219,43 @@ check(
   "легаси-маршрут без времени: одна линия",
   splitRouteIntoSegments(legacyRoute).length,
   1,
+);
+
+// 14. Правила «продолжить»: только последняя прогулка и только свежая.
+const now = startTime;
+const freshEnd = new Date(now - 60 * 60 * 1000); // час назад
+const oldEnd = new Date(now - 4 * 60 * 60 * 1000); // четыре часа назад
+const olderExpedition = { id: 1, endTime: freshEnd };
+const newerExpedition = { id: 2, endTime: freshEnd };
+
+check(
+  "продолжить: последняя и свежая",
+  isResumableExpedition(newerExpedition, [olderExpedition, newerExpedition], now),
+  "true",
+);
+check(
+  "продолжить: не последняя",
+  isResumableExpedition(olderExpedition, [olderExpedition, newerExpedition], now),
+  "false",
+);
+check(
+  "продолжить: старше трёх часов",
+  isResumableExpedition({ id: 2, endTime: oldEnd }, [{ id: 2, endTime: oldEnd }], now),
+  "false",
+);
+check(
+  "продолжить: ровно на границе окна",
+  isResumableExpedition(
+    { id: 2, endTime: new Date(now - RESUME_WINDOW_MS) },
+    [{ id: 2 }],
+    now,
+  ),
+  "true",
+);
+check(
+  "продолжить: незавершённую не предлагаем",
+  isResumableExpedition({ id: 2, endTime: null }, [{ id: 2 }], now),
+  "false",
 );
 
 console.log(results.join("\n"));

@@ -36,6 +36,32 @@ const SIMPLIFY_TOLERANCE_METERS = 4;
 // каждые 5 секунд — на длинной прогулке это O(n²) по объёму записи.
 export const ROUTE_SAVE_INTERVAL_MS = 20000;
 
+// «Продолжить» — это отмена случайного «Остановить», а не склейка двух прогулок.
+// Через три часа это уже другая прогулка: своё название, свой маршрут.
+export const RESUME_WINDOW_MS = 3 * 60 * 60 * 1000;
+
+/**
+ * Можно ли продолжить завершённую экспедицию.
+ * Только последнюю (более новых нет) и только если с конца прошло не больше
+ * RESUME_WINDOW_MS. Незавершённую продолжать не нужно — она и так идёт.
+ */
+export function isResumableExpedition(expedition, expeditions, nowMs = Date.now()) {
+  if (!expedition || !expedition.endTime) {
+    return false;
+  }
+
+  const newestId = expeditions.reduce(
+    (newest, item) => (item.id > newest ? item.id : newest),
+    0,
+  );
+
+  if (expedition.id !== newestId) {
+    return false;
+  }
+
+  return nowMs - new Date(expedition.endTime).getTime() <= RESUME_WINDOW_MS;
+}
+
 /** Точка маршрута: [широта, долгота, время в мс]. Время нужно для честной скорости. */
 export function createRoutePoint(latitude, longitude, timestamp = Date.now()) {
   return [latitude, longitude, timestamp];
