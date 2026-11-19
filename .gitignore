@@ -40,6 +40,7 @@ dist-ssr
 # Внутренние документы проекта — только локально, в публичный репозиторий не идут
 /PROJECT_CONTEXT.md
 /AGENT-RULES.md
+/DECISIONS.md
 /BACKLOG.md
 .env
 
