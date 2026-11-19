@@ -5,7 +5,6 @@ function Archive({
   allFindings,
   onSelect,
   onStart,
-  onDeleteExpedition,
   onHardReset,
   onOpenSummary,
   onExport,
@@ -85,13 +84,6 @@ function Archive({
                     onClick={() => onOpenSummary(expedition.id)}
                   >
                     отчёт
-                  </button>
-                  <button
-                    className="btn btn--muted btn--danger"
-                    onClick={() => onDeleteExpedition(expedition.id)}
-                    aria-label="Удалить экспедицию"
-                  >
-                    удалить
                   </button>
                 </div>
               </div>

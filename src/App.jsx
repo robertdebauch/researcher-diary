@@ -2,6 +2,7 @@ import Archive from "./components/Archive";
 import MapView from "./components/MapView";
 import FindingModal from "./components/FindingModal";
 import FindingsLog from "./components/FindingsLog";
+import { useFeedback } from "./components/feedbackContext";
 import SettingsSheet from "./components/SettingsSheet";
 import StartExpeditionModal from "./components/StartExpeditionModal";
 import SummaryView from "./components/SummaryView";
@@ -21,6 +22,7 @@ import {
 } from "./utils.js";
 
 function App() {
+  const { notify, confirm } = useFeedback();
   const [position, setPosition] = useState(null);
   const [isWalking, setIsWalking] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
@@ -323,13 +325,13 @@ function App() {
       setFindingImage(compressedImage);
     } catch (error) {
       console.error("Ошибка при сжатии изображения:", error);
-      alert("Не удалось обработать изображение");
+      notify("Не удалось обработать изображение", { tone: "error" });
     }
   };
 
   const addFinding = async () => {
     if (!position) {
-      alert("Сначала нужно определить ваше местоположение");
+      notify("Сначала нужно определить ваше местоположение", { tone: "error" });
       return;
     }
     setFindingName("");
@@ -342,7 +344,7 @@ function App() {
     const trimmedDescription = findingDescription.trim();
 
     if (!trimmedName && !trimmedDescription) {
-      alert("Добавьте название или описание");
+      notify("Добавьте название или описание", { tone: "error" });
       return;
     }
 
@@ -372,83 +374,110 @@ function App() {
       setFindingImage(null);
       setIsGoal(false);
 
-      alert("Находка зафиксирована!");
+      notify("Находка зафиксирована");
     } catch (error) {
       console.error("Ошибка!", error);
+      notify("Не удалось сохранить находку", { tone: "error" });
     }
   };
 
   const deleteFinding = async (findingId) => {
-    if (window.confirm("Вы уверены, что хотите удалить эту находку?")) {
-      try {
-        await db.findings.delete(findingId);
+    const shouldDelete = await confirm({
+      message: "Удалить эту находку?",
+      confirmLabel: "Удалить",
+    });
 
-        // Обновляем стейты, чтобы находка мгновенно исчезла с экрана
-        setFindings((prev) => prev.filter((f) => f.id !== findingId));
-        setAllFindingsInDB((prev) => prev.filter((f) => f.id !== findingId));
+    if (!shouldDelete) {
+      return;
+    }
 
-        alert("Находка удалена");
-      } catch (error) {
-        console.error("Ошибка при удалении:", error);
-        alert("Не удалось удалить находку");
-      }
+    try {
+      await db.findings.delete(findingId);
+
+      // Обновляем стейты, чтобы находка мгновенно исчезла с экрана
+      setFindings((prev) => prev.filter((f) => f.id !== findingId));
+      setAllFindingsInDB((prev) => prev.filter((f) => f.id !== findingId));
+
+      notify("Находка удалена");
+    } catch (error) {
+      console.error("Ошибка при удалении:", error);
+      notify("Не удалось удалить находку", { tone: "error" });
     }
   };
 
   const deleteExpedition = async (expeditionId) => {
-    if (
-      window.confirm(
-        "Вы уверены, что хотите удалить всю экспедицию и все находки в ней?",
-      )
-    ) {
-      try {
-        const findingsToDelete = await db.findings
-          .where("expeditionId")
-          .equals(expeditionId)
-          .toArray();
+    const shouldDelete = await confirm({
+      message: "Удалить экспедицию и все находки в ней?",
+      confirmLabel: "Удалить",
+    });
 
-        await Promise.all(
-          findingsToDelete.map((finding) => db.findings.delete(finding.id)),
-        );
+    if (!shouldDelete) {
+      return false;
+    }
 
-        await db.expeditions.delete(expeditionId);
+    try {
+      const findingsToDelete = await db.findings
+        .where("expeditionId")
+        .equals(expeditionId)
+        .toArray();
 
-        setExpeditions((prev) => prev.filter((exp) => exp.id !== expeditionId));
-        setAllFindingsInDB((prev) =>
-          prev.filter((f) => f.expeditionId !== expeditionId),
-        );
+      await Promise.all(
+        findingsToDelete.map((finding) => db.findings.delete(finding.id)),
+      );
 
-        alert("Экспедиция полностью удалена");
-      } catch (error) {
-        console.error("Ошибка при удалении экспедиции!", error);
-        alert("Не удалось удалить экспедицию!");
-      }
+      await db.expeditions.delete(expeditionId);
+
+      setExpeditions((prev) => prev.filter((exp) => exp.id !== expeditionId));
+      setAllFindingsInDB((prev) =>
+        prev.filter((f) => f.expeditionId !== expeditionId),
+      );
+
+      notify("Экспедиция удалена");
+      return true;
+    } catch (error) {
+      console.error("Ошибка при удалении экспедиции!", error);
+      notify("Не удалось удалить экспедицию", { tone: "error" });
+      return false;
+    }
+  };
+
+  // Удаление живёт только в отчёте: после него уходим в архив.
+  const deleteExpeditionFromReport = async (expeditionId) => {
+    const isDeleted = await deleteExpedition(expeditionId);
+
+    if (isDeleted) {
+      setSummaryExpeditionId(null);
+      setView("archive");
     }
   };
 
   const handleHardReset = async () => {
-    if (
-      window.confirm(
-        "⚠️ ВНИМАНИЕ! Это безвозвратно удалит ВСЕ ваши экспедиции и находки. Вы уверены?",
-      )
-    ) {
-      try {
-        await clearAllData();
+    const shouldReset = await confirm({
+      message:
+        "Безвозвратно удалить все экспедиции и находки? Вернуть их можно только из бэкапа.",
+      confirmLabel: "Удалить всё",
+    });
 
-        setExpeditions([]);
-        setAllFindingsInDB([]);
-        setFindings([]);
-        setRoute([]);
-        setCurrentExpeditionId(null);
-        setIsWalking(false);
-        setIsPaused(false);
-        setView("archive");
+    if (!shouldReset) {
+      return;
+    }
 
-        alert("Все данные успешно удалены!");
-      } catch (error) {
-        console.error("Ошибка при полном сбросе:", error);
-        alert("Произошла ошибка при удалении данных");
-      }
+    try {
+      await clearAllData();
+
+      setExpeditions([]);
+      setAllFindingsInDB([]);
+      setFindings([]);
+      setRoute([]);
+      setCurrentExpeditionId(null);
+      setIsWalking(false);
+      setIsPaused(false);
+      setView("archive");
+
+      notify("Все данные удалены");
+    } catch (error) {
+      console.error("Ошибка при полном сбросе:", error);
+      notify("Не удалось удалить данные", { tone: "error" });
     }
   };
 
@@ -465,10 +494,10 @@ function App() {
       link.click();
 
       URL.revokeObjectURL(url);
-      alert("Бэкап успешно создан");
+      notify("Бэкап создан");
     } catch (error) {
       console.error("Ошибка при экспорте!", error);
-      alert("Не удалось экспортировать данные");
+      notify("Не удалось экспортировать данные", { tone: "error" });
     }
   };
 
@@ -484,11 +513,11 @@ function App() {
         const json = JSON.parse(e.target.result);
         await importAllData(json);
 
-        alert("Данные успешно восстановлены! Сейчас страница обновится");
-        window.location.reload();
+        notify("Данные восстановлены, страница обновится");
+        window.setTimeout(() => window.location.reload(), 700);
       } catch (error) {
         console.error("Ошибка при импорте:", error);
-        alert("Ошибка: файл поврежден или имеет неверный формат");
+        notify("Файл повреждён или имеет неверный формат", { tone: "error" });
       }
     };
     reader.readAsText(file);
@@ -555,14 +584,14 @@ function App() {
 
   useEffect(() => {
     if (!navigator.geolocation) {
-      alert("Браузер не поддерживает геолокацию!");
+      notify("Браузер не поддерживает геолокацию", { tone: "error" });
       return;
     }
 
     navigator.geolocation.getCurrentPosition(
       updatePosition,
       (err) => {
-        alert("Error: " + err.message);
+        notify(`Не получили координаты: ${err.message}`, { tone: "error" });
       },
       { enableHighAccuracy: true },
     );
@@ -576,7 +605,7 @@ function App() {
       }, 5000);
     }
     return () => clearInterval(timer);
-  }, [isWalking, isPaused, updatePosition]);
+  }, [isWalking, isPaused, updatePosition, notify]);
 
   const summaryExpedition = expeditions.find(
     (expedition) => expedition.id === summaryExpeditionId,
@@ -597,7 +626,6 @@ function App() {
           allFindings={allFindingsInDB}
           onSelect={selectExpedition}
           onStart={() => setIsStartModalOpen(true)}
-          onDeleteExpedition={deleteExpedition}
           onHardReset={handleHardReset}
           onOpenSummary={openSummary}
           onExport={handleExport}
@@ -612,6 +640,7 @@ function App() {
           )}
           onBack={() => setView("archive")}
           onResume={resumeExpedition}
+          onDelete={deleteExpeditionFromReport}
           canResume={canResumeSummary}
         />
       ) : (

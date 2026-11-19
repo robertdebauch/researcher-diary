@@ -5,7 +5,7 @@ import {
   getFindingName,
 } from "../utils";
 
-function SummaryView({ expedition, findings, onBack, onResume, canResume }) {
+function SummaryView({ expedition, findings, onBack, onResume, onDelete, canResume }) {
   // Отчёт могли открыть для экспедиции, которой уже нет в state — не роняем приложение.
   if (!expedition) {
     return (
@@ -96,7 +96,6 @@ function SummaryView({ expedition, findings, onBack, onResume, canResume }) {
       <section className="section">
         {/* Число находок уже стоит в «выборке» — здесь только название раздела. */}
         <p className="section__label">Находки</p>
-
         {findings.length === 0 ? (
           <p className="empty-state">Ничего не зафиксировано.</p>
         ) : (
@@ -128,6 +127,16 @@ function SummaryView({ expedition, findings, onBack, onResume, canResume }) {
             </article>
           ))
         )}
+      </section>
+
+      <section className="section">
+        <p className="section__label">Данные</p>
+        <button
+          className="btn btn--muted btn--danger"
+          onClick={() => onDelete(expedition.id)}
+        >
+          Удалить экспедицию
+        </button>
       </section>
     </div>
   );

@@ -472,37 +472,55 @@ export function escapeHtml(value) {
     .replaceAll('"', "&quot;");
 }
 
+/**
+ * Сжимает фото перед записью в IndexedDB.
+ * EXIF-ориентация: без `imageOrientation: "from-image"` портретные снимки
+ * с телефона ложились в базу повёрнутыми набок.
+ */
 export async function compressImage(file, maxWidth = 1200, quality = 0.7) {
+  const bitmap = await loadOrientedBitmap(file);
+  const ratio = Math.min(1, maxWidth / Math.max(bitmap.width, bitmap.height));
+  const width = Math.max(1, Math.round(bitmap.width * ratio));
+  const height = Math.max(1, Math.round(bitmap.height * ratio));
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext("2d");
+  context.drawImage(bitmap, 0, 0, width, height);
+
+  if (typeof bitmap.close === "function") {
+    bitmap.close();
+  }
+
+  return canvas.toDataURL("image/jpeg", quality);
+}
+
+/** Читает файл с учётом EXIF; если браузер не умеет — обычный Image. */
+async function loadOrientedBitmap(file) {
+  if (typeof createImageBitmap === "function") {
+    try {
+      return await createImageBitmap(file, { imageOrientation: "from-image" });
+    } catch (error) {
+      console.warn("createImageBitmap не сработал, читаем через Image:", error);
+    }
+  }
+
+  return loadBitmapFallback(file);
+}
+
+function loadBitmapFallback(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.readAsDataURL(file);
 
     reader.onload = (event) => {
-      const img = new Image();
-      img.src = event.target.result;
-
-      img.onload = () => {
-        const canvas = document.createElement("canvas");
-        let width = img.width;
-        let height = img.height;
-
-        if (width > maxWidth || height > maxWidth) {
-          const ratio = Math.min(maxWidth / width, maxWidth / height);
-          width = width * ratio;
-          height = height * ratio;
-        }
-
-        canvas.width = width;
-        canvas.height = height;
-
-        const ctx = canvas.getContext("2d");
-        ctx.drawImage(img, 0, 0, width, height);
-
-        const dataUrl = canvas.toDataURL("image/jpeg", quality);
-        resolve(dataUrl);
-      };
-      img.onerror = (error) => reject(error);
+      const image = new Image();
+      image.onload = () => resolve(image);
+      image.onerror = reject;
+      image.src = event.target.result;
     };
-    reader.onerror = (error) => reject(error);
+    reader.onerror = reject;
   });
 }

@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client";
 import { registerSW } from "virtual:pwa-register";
 import "./index.css";
 import App from "./App.jsx";
+import { FeedbackProvider } from "./components/Feedback.jsx";
 
 // Service worker: оболочка приложения открывается офлайн.
 // В dev-режиме регистрация не нужна — там её заменяет HMR.
@@ -12,7 +13,9 @@ if (import.meta.env.PROD) {
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
-    <App />
+    <FeedbackProvider>
+      <App />
+    </FeedbackProvider>
   </StrictMode>,
 );
 
