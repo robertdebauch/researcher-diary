@@ -130,10 +130,6 @@ button {
   color: var(--accent);
 }
 
-.btn--danger:hover {
-  color: #ff5c5c;
-}
-
 /* Лист снизу: единственная «поверхность» в приложении */
 .sheet {
   position: fixed;

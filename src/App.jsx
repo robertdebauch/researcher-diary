@@ -445,10 +445,23 @@ function App() {
   const deleteExpeditionFromReport = async (expeditionId) => {
     const isDeleted = await deleteExpedition(expeditionId);
 
-    if (isDeleted) {
-      setSummaryExpeditionId(null);
-      setView("archive");
+    if (!isDeleted) {
+      return;
     }
+
+    // Отчёт можно открыть и для активной прогулки (через «← Архив»),
+    // поэтому после удаления гасим трекинг, иначе он останется висеть.
+    if (currentExpeditionId === expeditionId) {
+      setIsWalking(false);
+      setIsPaused(false);
+      setCurrentExpeditionId(null);
+      setRoute([]);
+      setFindings([]);
+      pendingBreakRef.current = false;
+    }
+
+    setSummaryExpeditionId(null);
+    setView("archive");
   };
 
   const handleHardReset = async () => {

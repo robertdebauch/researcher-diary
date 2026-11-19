@@ -81,7 +81,17 @@ export function FeedbackProvider({ children }) {
       {children}
 
       {confirmation && (
-        <div className="sheet" role="dialog" aria-modal="true">
+        <div
+          className="sheet"
+          role="dialog"
+          aria-modal="true"
+          onClick={(event) => {
+            // Тап по затемнению = отмена: на телефоне Escape недоступен.
+            if (event.target === event.currentTarget) {
+              answerConfirmation(false);
+            }
+          }}
+        >
           <div className="sheet__panel confirm">
             <p className="confirm__text">{confirmation.message}</p>
 
@@ -93,7 +103,7 @@ export function FeedbackProvider({ children }) {
                 {confirmation.cancelLabel ?? "Отмена"}
               </button>
               <button
-                className="btn btn--accent"
+                className="btn"
                 onClick={() => answerConfirmation(true)}
               >
                 {confirmation.confirmLabel ?? "Да"}

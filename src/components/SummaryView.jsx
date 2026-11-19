@@ -131,10 +131,7 @@ function SummaryView({ expedition, findings, onBack, onResume, onDelete, canResu
 
       <section className="section">
         <p className="section__label">Данные</p>
-        <button
-          className="btn btn--muted btn--danger"
-          onClick={() => onDelete(expedition.id)}
-        >
+        <button className="btn" onClick={() => onDelete(expedition.id)}>
           Удалить экспедицию
         </button>
       </section>

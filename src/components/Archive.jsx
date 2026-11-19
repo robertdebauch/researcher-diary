@@ -116,10 +116,7 @@ function Archive({
         </div>
 
         {expeditions.length > 0 && (
-          <button
-            className="btn btn--muted btn--danger"
-            onClick={onHardReset}
-          >
+          <button className="btn btn--muted" onClick={onHardReset}>
             Полный сброс данных
           </button>
         )}

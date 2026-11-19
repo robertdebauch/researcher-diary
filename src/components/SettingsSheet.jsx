@@ -185,7 +185,7 @@ function SettingsSheet({ isOpen, onClose }) {
         </p>
 
         {savedKey && (
-          <button className="btn btn--muted btn--danger" onClick={handleForgetKey}>
+          <button className="btn btn--muted" onClick={handleForgetKey}>
             Забыть ключ
           </button>
         )}

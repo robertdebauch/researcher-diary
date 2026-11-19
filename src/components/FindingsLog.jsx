@@ -51,7 +51,7 @@ function FindingsLog({ isOpen, findings, onClose, onDeleteFinding }) {
                 )}
 
                 <button
-                  className="btn btn--muted btn--danger"
+                  className="btn btn--muted"
                   onClick={() => onDeleteFinding(finding.id)}
                 >
                   удалить
