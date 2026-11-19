@@ -75,7 +75,8 @@ function App() {
         setCurrentExpeditionId(activeExpedition.id);
         setRoute(activeExpedition.path || []);
         setIsWalking(true);
-        setIsPaused(false);
+        // Пауза живёт в базе: если закрыли приложение на паузе — так и восстановим.
+        setIsPaused(Boolean(activeExpedition.pausedAt));
         setIsFollowEnabled(true);
         setView("map");
 
@@ -146,7 +147,7 @@ function App() {
       setRoute(activeExpedition.path || []);
       setFindings(activeFindings);
       setIsWalking(true);
-      setIsPaused(false);
+      setIsPaused(Boolean(activeExpedition.pausedAt));
       setIsFollowEnabled(true);
       setIsStartModalOpen(false);
       setView("map");
@@ -156,6 +157,7 @@ function App() {
     const newExpedition = {
       startTime: new Date(),
       endTime: null,
+      pausedAt: null,
       path: [],
       title: expeditionTitle.trim() || "Без названия",
       goal: expeditionGoal.trim() || "Исследование",
@@ -195,19 +197,49 @@ function App() {
   };
 
   // Пауза не закрывает экспедицию: точки перестают писаться, время не идёт,
-  // находку всё равно можно зафиксировать.
-  const pauseWalk = () => {
+  // находку всё равно можно зафиксировать. Признак паузы пишем в базу, иначе
+  // после перезапуска приложение решит, что запись шла всё это время.
+  const pauseWalk = async () => {
     setIsPaused(true);
 
-    if (currentExpeditionId) {
-      // Пауза — естественная граница записи, не ждём окна троттлинга.
-      db.expeditions.update(currentExpeditionId, { path: route });
+    if (!currentExpeditionId) {
+      return;
     }
+
+    const pausedAt = new Date();
+
+    // Пауза — естественная граница записи, не ждём окна троттлинга.
+    await db.expeditions.update(currentExpeditionId, {
+      path: route,
+      pausedAt,
+    });
+
+    setExpeditions((prevExpeditions) =>
+      prevExpeditions.map((expedition) =>
+        expedition.id === currentExpeditionId
+          ? { ...expedition, path: route, pausedAt }
+          : expedition,
+      ),
+    );
   };
 
-  const resumeWalk = () => {
+  const resumeWalk = async () => {
     setIsPaused(false);
     setIsFollowEnabled(true);
+
+    if (!currentExpeditionId) {
+      return;
+    }
+
+    await db.expeditions.update(currentExpeditionId, { pausedAt: null });
+
+    setExpeditions((prevExpeditions) =>
+      prevExpeditions.map((expedition) =>
+        expedition.id === currentExpeditionId
+          ? { ...expedition, pausedAt: null }
+          : expedition,
+      ),
+    );
   };
 
   const finishWalk = async () => {
@@ -217,12 +249,13 @@ function App() {
       await db.expeditions.update(currentExpeditionId, {
         endTime,
         path: route,
+        pausedAt: null,
       });
 
       setExpeditions((prevExpeditions) =>
         prevExpeditions.map((expedition) =>
           expedition.id === currentExpeditionId
-            ? { ...expedition, endTime, path: route }
+            ? { ...expedition, endTime, path: route, pausedAt: null }
             : expedition,
         ),
       );
@@ -242,11 +275,11 @@ function App() {
       return;
     }
 
-    await db.expeditions.update(expeditionId, { endTime: null });
+    await db.expeditions.update(expeditionId, { endTime: null, pausedAt: null });
 
     setExpeditions((prevExpeditions) =>
       prevExpeditions.map((item) =>
-        item.id === expeditionId ? { ...item, endTime: null } : item,
+        item.id === expeditionId ? { ...item, endTime: null, pausedAt: null } : item,
       ),
     );
 
