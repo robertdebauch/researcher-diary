@@ -14,6 +14,10 @@ const TELEPORT_GAP_METERS = 200;
 // браузер, троттлящий геолокацию в фоне, рвёт линию на куски каждую минуту.
 const SEGMENT_GAP_MS = 180000;
 
+// Пунктир «мы знаем, что ты тут шёл, но данных нет» рисуем только для коротких
+// разрывов: через полгорода он выглядел бы как ошибка карты.
+export const MAX_BREAK_DASH_METERS = 300;
+
 // Считаем отрезок «движением», только если скорость выше порога: иначе это дрожь
 // GPS на месте (5–10 м за 5 секунд выглядят как 3–7 км/ч и портят среднюю скорость).
 const MIN_MOVEMENT_SPEED_KMPH = 1;
@@ -62,9 +66,32 @@ export function isResumableExpedition(expedition, expeditions, nowMs = Date.now(
   return nowMs - new Date(expedition.endTime).getTime() <= RESUME_WINDOW_MS;
 }
 
-/** Точка маршрута: [широта, долгота, время в мс]. Время нужно для честной скорости. */
-export function createRoutePoint(latitude, longitude, timestamp = Date.now()) {
-  return [latitude, longitude, timestamp];
+/**
+ * Точка маршрута: [широта, долгота, время в мс].
+ * Четвёртый элемент — только у первой точки после паузы (1 = «здесь разрыв»).
+ * Старые точки без времени и флага читаются как раньше.
+ */
+export function createRoutePoint(
+  latitude,
+  longitude,
+  timestamp = Date.now(),
+  isSegmentStart = false,
+) {
+  return isSegmentStart
+    ? [latitude, longitude, timestamp, 1]
+    : [latitude, longitude, timestamp];
+}
+
+function isSegmentStartPoint(point) {
+  return point.length > 3 && point[3] === 1;
+}
+
+/**
+ * Leaflet понимает только [lat, lng] и [lat, lng, alt]; массив из четырёх чисел
+ * он превращает в null и падает. Всё лишнее (время, флаг разрыва) отрезаем.
+ */
+export function toLeafletPositions(points) {
+  return points.map((point) => [point[0], point[1]]);
 }
 
 function getPointTimestamp(point) {
@@ -194,9 +221,9 @@ export function splitRouteIntoSegments(path) {
     const previousPoint = path[i - 1];
     const point = path[i];
 
-    // Пауза — тоже разрыв: без этого линия соединила бы точки по прямой,
-    // хотя человек в это время стоял на месте или ехал в транспорте.
-    if (isTimeGap(previousPoint, point)) {
+    // Пауза — тоже разрыв: флаг стоит на первой точке после неё, поэтому ручная
+    // пауза рвёт линию даже короче SEGMENT_GAP_MS. Без флага смотрим на время.
+    if (isSegmentStartPoint(point) || isTimeGap(previousPoint, point)) {
       segments.push([point]);
       continue;
     }
@@ -212,6 +239,75 @@ export function splitRouteIntoSegments(path) {
   }
 
   return segments;
+}
+
+/**
+ * Разрывы маршрута: где линия обрывается и почему.
+ * `isPause` — ручная пауза (флаг в точке), иначе «нет данных» (фон, потеря GPS).
+ * Длительность и расстояние не хранятся — считаются из соседних точек.
+ */
+export function getRouteBreaks(path) {
+  if (!path || path.length < 2) {
+    return [];
+  }
+
+  const breaks = [];
+
+  for (let i = 1; i < path.length; i++) {
+    const from = path[i - 1];
+    const to = path[i];
+
+    if (!isSegmentStartPoint(to) && !isTimeGap(from, to)) {
+      continue;
+    }
+
+    breaks.push({
+      from,
+      to,
+      isPause: isSegmentStartPoint(to),
+      durationMs: resolveElapsedMs(from, to),
+      distanceMeters: calculateDistance(from, to),
+    });
+  }
+
+  return breaks;
+}
+
+/** «40 сек», «12 мин», «1 ч 12 мин» — для попапа разрыва. */
+export function formatGapDuration(durationMs) {
+  const seconds = Math.max(1, Math.round(durationMs / 1000));
+
+  if (seconds < 60) {
+    return `${seconds} сек`;
+  }
+
+  const totalMinutes = Math.round(seconds / 60);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (hours === 0) {
+    return `${totalMinutes} мин`;
+  }
+
+  return minutes === 0 ? `${hours} ч` : `${hours} ч ${minutes} мин`;
+}
+
+/** «14:20–14:32» — время до и после разрыва, если у точек есть таймстампы. */
+export function formatBreakTimeRange(point1, point2) {
+  const startTime = getPointTimestamp(point1);
+  const endTime = getPointTimestamp(point2);
+
+  if (startTime === null || endTime === null) {
+    return "";
+  }
+
+  const format = (value) =>
+    new Date(value).toLocaleTimeString("ru-RU", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+  return `${format(startTime)}–${format(endTime)}`;
 }
 
 /** Убирает локальные выбросы GPS внутри сегмента, чтобы линия не «дёргалась». */
@@ -233,8 +329,15 @@ export function filterImplausiblePoints(points) {
   return filtered;
 }
 
-/** Добавляет точку в маршрут, пропуская шум: слишком близкие точки не пишем. */
-export function appendRoutePoint(route, coordinates) {
+/**
+ * Добавляет точку в маршрут, пропуская шум: слишком близкие точки не пишем.
+ * `isSegmentStart` помечает первую точку после паузы — по ней рисуется разрыв.
+ */
+export function appendRoutePoint(
+  route,
+  coordinates,
+  { isSegmentStart = false } = {},
+) {
   const lastPoint = route[route.length - 1];
 
   if (
@@ -244,7 +347,10 @@ export function appendRoutePoint(route, coordinates) {
     return route;
   }
 
-  return [...route, createRoutePoint(coordinates[0], coordinates[1])];
+  return [
+    ...route,
+    createRoutePoint(coordinates[0], coordinates[1], Date.now(), isSegmentStart),
+  ];
 }
 
 /** Расстояние от точки до отрезка в метрах (локальная равнопромежуточная проекция). */

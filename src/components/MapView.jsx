@@ -1,5 +1,5 @@
 import L from "leaflet";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import {
   AttributionControl,
   MapContainer,
@@ -15,10 +15,15 @@ import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import {
   escapeHtml,
   filterImplausiblePoints,
+  formatBreakTimeRange,
+  formatGapDuration,
   getFindingDescription,
   getFindingName,
+  getRouteBreaks,
+  MAX_BREAK_DASH_METERS,
   simplifyPath,
   splitRouteIntoSegments,
+  toLeafletPositions,
 } from "../utils.js";
 
 // Ключ берётся из .env.development (localhost) или .env.production (Pages) — см. .env.example.
@@ -34,6 +39,28 @@ const CARTO_ATTRIBUTION = `${OSM_ATTRIBUTION}, &copy; <a href="https://carto.com
 function buildCartoTileUrl(showLabels) {
   const style = showLabels ? "light_all" : "light_nolabels";
   return `https://basemaps.cartocdn.com/rastertiles/${style}/{z}/{x}/{y}{r}.png?key=${CARTO_API_KEY}`;
+}
+
+// Знак разрыва: две волосяные черты. Цвет дублирует --route-break в App.css,
+// потому что Leaflet не умеет читать CSS-переменные в атрибутах SVG.
+const BREAK_COLOR = "#8a8a8a";
+
+const BREAK_ICON = L.divIcon({
+  className: "route-break",
+  html: "",
+  iconSize: [8, 8],
+  iconAnchor: [4, 4],
+});
+
+/** Подпись разрыва: «Пауза · 12 мин · 14:20–14:32» или «Нет данных · 1 ч 12 мин». */
+function describeBreak(routeBreak) {
+  const label = routeBreak.isPause ? "Пауза" : "Нет данных";
+  const duration = formatGapDuration(routeBreak.durationMs);
+  const range = formatBreakTimeRange(routeBreak.from, routeBreak.to);
+
+  return range
+    ? `${label} · ${duration} · ${range}`
+    : `${label} · ${duration}`;
 }
 
 function MapCamera({
@@ -70,7 +97,7 @@ function MapCamera({
     fittedExpeditionRef.current = currentExpeditionId;
 
     if (route && route.length > 1) {
-      const bounds = L.polyline(route).getBounds();
+      const bounds = L.polyline(toLeafletPositions(route)).getBounds();
       map.fitBounds(bounds, { padding: [20, 20] });
     } else if (position) {
       map.setView(position, 15);
@@ -123,6 +150,9 @@ function MapView({
         .filter((segment) => segment.length > 1),
     [route],
   );
+
+  // Разрывы: ручная пауза (флаг в точке) или потеря данных (разрыв по времени).
+  const routeBreaks = useMemo(() => getRouteBreaks(route), [route]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -246,8 +276,38 @@ function MapView({
           {routeSegments.map((segment, index) => (
             <Polyline
               key={`route-segment-${index}`}
-              positions={segment}
+              positions={toLeafletPositions(segment)}
             />
+          ))}
+
+          {routeBreaks.map((routeBreak, index) => (
+            <Fragment key={`route-break-${index}`}>
+              {routeBreak.distanceMeters <= MAX_BREAK_DASH_METERS && (
+                <Polyline
+                  positions={toLeafletPositions([
+                    routeBreak.from,
+                    routeBreak.to,
+                  ])}
+                  pathOptions={{
+                    className: "route-break-line",
+                    color: BREAK_COLOR,
+                    weight: 1,
+                    opacity: 0.6,
+                    dashArray: "2 6",
+                    interactive: false,
+                  }}
+                />
+              )}
+
+              <Marker
+                position={[routeBreak.to[0], routeBreak.to[1]]}
+                icon={BREAK_ICON}
+              >
+                <Popup className="break-popup">
+                  {describeBreak(routeBreak)}
+                </Popup>
+              </Marker>
+            </Fragment>
           ))}
           <MapCamera
             position={position}

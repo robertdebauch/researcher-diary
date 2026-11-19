@@ -45,6 +45,9 @@
 
   /* Маршрут на карте — «чернила», а не акцент: на состаренной карте так читаемее. */
   --route-color: #141414;
+
+  /* Разрыв маршрута (пауза, потеря данных) — приглушённая линия и знак ‖. */
+  --route-break: #8a8a8a;
 }
 
 /* ---------- База ---------- */
@@ -663,6 +666,34 @@ button {
   stroke: var(--route-color);
   stroke-width: 3;
   stroke-opacity: 0.9;
+}
+
+/* Пунктир «здесь данных нет»: волосяная линия, а не маршрут. */
+.leaflet-overlay-pane path.route-break-line {
+  stroke: var(--route-break);
+  stroke-width: 1;
+  stroke-opacity: 0.6;
+  stroke-dasharray: 2 6;
+}
+
+/* Знак разрыва: две волосяные черты (‖). Акцент не используем — это не действие. */
+.route-break {
+  width: 8px;
+  height: 8px;
+  background: none;
+  border: 0;
+  border-left: 1px solid var(--route-break);
+  border-right: 1px solid var(--route-break);
+  box-sizing: border-box;
+}
+
+.break-popup .leaflet-popup-content {
+  margin: 8px 10px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink);
 }
 
 .custom-marker-icon {

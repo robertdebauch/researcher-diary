@@ -52,6 +52,10 @@ function App() {
     [],
   );
 
+  // Первая точка после паузы помечается флагом разрыва — по нему рисуются
+  // пунктир и знак паузы. Флаг снимаем, когда точка реально записалась.
+  const pendingBreakRef = useRef(false);
+
   // Лист находки читает ключ при открытии: после настроек ему нужна свежая версия.
   const closeSettings = useCallback(() => {
     setIsSettingsOpen(false);
@@ -124,7 +128,10 @@ function App() {
       // Неточные точки (дома, в начале трека, в подворотне) не пишем в маршрут:
       // они дают те самые «броски» линии через полкарты.
       if (isWalking && !isPaused && accuracy <= MAX_ACCURACY_METERS) {
-        setRoute((prevRoute) => appendRoutePoint(prevRoute, coordinates));
+        const isSegmentStart = pendingBreakRef.current;
+        setRoute((prevRoute) =>
+          appendRoutePoint(prevRoute, coordinates, { isSegmentStart }),
+        );
       }
     },
     [isWalking, isPaused],
@@ -226,6 +233,8 @@ function App() {
   const resumeWalk = async () => {
     setIsPaused(false);
     setIsFollowEnabled(true);
+    // Первая точка после паузы начнёт новый сегмент — на карте будет видно, где стояли.
+    pendingBreakRef.current = true;
 
     if (!currentExpeditionId) {
       return;
@@ -263,6 +272,7 @@ function App() {
 
     setIsWalking(false);
     setIsPaused(false);
+    pendingBreakRef.current = false;
     setCurrentExpeditionId(null);
   };
 
@@ -296,6 +306,9 @@ function App() {
     setIsFollowEnabled(true);
     setIsLogOpen(false);
     setView("map");
+
+    // Продолжение после «Остановить» — тоже разрыв, даже если прошло две минуты.
+    pendingBreakRef.current = true;
   };
 
   const handleImageChange = async (e) => {
@@ -486,6 +499,16 @@ function App() {
 
   useEffect(() => {
     routeRef.current = route;
+  }, [route]);
+
+  // Флаг разрыва снимаем только после того, как точка с ним действительно
+  // записалась: appendRoutePoint может отбросить шум ближе 3 м.
+  useEffect(() => {
+    const lastPoint = route[route.length - 1];
+
+    if (pendingBreakRef.current && lastPoint && lastPoint[3] === 1) {
+      pendingBreakRef.current = false;
+    }
   }, [route]);
 
   // Троттлинг записи: раньше весь массив точек перезаписывался каждые 5 секунд —

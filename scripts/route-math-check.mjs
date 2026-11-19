@@ -9,10 +9,13 @@ import {
   calculateRouteStats,
   createRoutePoint,
   filterImplausiblePoints,
+  formatGapDuration,
+  getRouteBreaks,
   isResumableExpedition,
   RESUME_WINDOW_MS,
   simplifyPath,
   splitRouteIntoSegments,
+  toLeafletPositions,
 } from "../src/utils.js";
 
 const results = [];
@@ -257,6 +260,53 @@ check(
   isResumableExpedition({ id: 2, endTime: null }, [{ id: 2 }], now),
   "false",
 );
+
+// 15. Разрыв по флагу: ручная пауза рвёт линию даже при коротком интервале.
+const flaggedRoute = [
+  createRoutePoint(55.75, 37.61, startTime),
+  createRoutePoint(
+    55.75 + metersToLatitude(7),
+    37.61,
+    startTime + 5000,
+    true,
+  ),
+];
+check("флаг: точка помечена", flaggedRoute[1].length, 4);
+check(
+  "флаг: короткая пауза рвёт линию",
+  splitRouteIntoSegments(flaggedRoute).length,
+  2,
+);
+
+const flaggedBreaks = getRouteBreaks(flaggedRoute);
+check("флаг: разрыв найден", flaggedBreaks.length, 1);
+check("флаг: это пауза", flaggedBreaks[0]?.isPause, "true");
+check("флаг: длительность из точек (с)", flaggedBreaks[0]?.durationMs / 1000, "5");
+
+// 16. Временной разрыв без флага — «нет данных», а не пауза.
+const dataGapBreaks = getRouteBreaks(pauseGapRoute);
+check("без флага: разрывов", dataGapBreaks.length, 1);
+check("без флага: это не пауза", dataGapBreaks[0]?.isPause, "false");
+check(
+  "без флага: длительность (с)",
+  dataGapBreaks[0]?.durationMs / 1000,
+  "300",
+);
+
+// 17. Ровный маршрут и легаси без времени разрывов не имеют.
+check("ровный маршрут: разрывов нет", getRouteBreaks(steadyRoute).length, 0);
+check("легаси без времени: разрывов нет", getRouteBreaks(legacyRoute).length, 0);
+
+// 18. Подписи разрывов: секунды, минуты, часы.
+check("подпись 45 с", formatGapDuration(45000), "45 сек");
+check("подпись 12 мин", formatGapDuration(12 * 60 * 1000), "12 мин");
+check("подпись 1 ч", formatGapDuration(60 * 60 * 1000), "1 ч");
+check("подпись 1 ч 12 мин", formatGapDuration(72 * 60 * 1000), "1 ч 12 мин");
+
+// 19. Leaflet: точка с флагом (4 элемента) отдаётся ему парой координат.
+const leafletPositions = toLeafletPositions(flaggedRoute);
+check("leaflet: 4 элемента обрезаны", leafletPositions[1].length, 2);
+check("leaflet: координаты сохранены", leafletPositions[1][0], flaggedRoute[1][0]);
 
 console.log(results.join("\n"));
 
