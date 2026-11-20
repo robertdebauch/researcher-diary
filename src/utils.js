@@ -72,23 +72,34 @@ export function isResumableExpedition(expedition, expeditions, nowMs = Date.now(
 }
 
 /**
- * Точка маршрута: [широта, долгота, время в мс].
- * Четвёртый элемент — только у первой точки после паузы (1 = «здесь разрыв»).
- * Старые точки без времени и флага читаются как раньше.
+ * Точка маршрута: [широта, долгота, время в мс, флаг разрыва (0/1), точность в м].
+ * Флаг стоит на первой точке после паузы; точность нужна, чтобы понимать,
+ * сколько точек отбрасывает фильтр в реальных условиях. Старые точки без
+ * времени/флага/точности читаются как раньше.
  */
 export function createRoutePoint(
   latitude,
   longitude,
   timestamp = Date.now(),
   isSegmentStart = false,
+  accuracy = null,
 ) {
-  return isSegmentStart
-    ? [latitude, longitude, timestamp, 1]
-    : [latitude, longitude, timestamp];
+  return [
+    latitude,
+    longitude,
+    timestamp,
+    isSegmentStart ? 1 : 0,
+    accuracy,
+  ];
 }
 
 function isSegmentStartPoint(point) {
   return point.length > 3 && point[3] === 1;
+}
+
+/** Точность точки в метрах (у старых точек её нет). */
+export function getPointAccuracy(point) {
+  return point.length > 4 ? point[4] : null;
 }
 
 /**
@@ -374,7 +385,7 @@ export function filterImplausiblePoints(points) {
 export function appendRoutePoint(
   route,
   coordinates,
-  { isSegmentStart = false } = {},
+  { isSegmentStart = false, accuracy = null } = {},
 ) {
   const lastPoint = route[route.length - 1];
 
@@ -387,7 +398,13 @@ export function appendRoutePoint(
 
   return [
     ...route,
-    createRoutePoint(coordinates[0], coordinates[1], Date.now(), isSegmentStart),
+    createRoutePoint(
+      coordinates[0],
+      coordinates[1],
+      Date.now(),
+      isSegmentStart,
+      accuracy,
+    ),
   ];
 }
 

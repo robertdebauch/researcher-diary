@@ -13,6 +13,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import "leaflet/dist/leaflet.css";
 import "./App.css";
 import { db, clearAllData, exportAllData, importAllData } from "./db";
+import { logDiagnostic } from "./diagnostics";
 import {
   compressImage,
   appendRoutePoint,
@@ -57,6 +58,57 @@ function App() {
   // Первая точка после паузы помечается флагом разрыва — по нему рисуются
   // пунктир и знак паузы. Флаг снимаем, когда точка реально записалась.
   const pendingBreakRef = useRef(false);
+
+  // watchPosition присылает обновления чаще, чем нужен шаг маршрута.
+  const MIN_POINT_INTERVAL_MS = 4000;
+
+  const lastAppendAtRef = useRef(0);
+  const lastFlushAtRef = useRef(0);
+  const countersRef = useRef({
+    accepted: 0,
+    droppedAccuracy: 0,
+    skippedThrottle: 0,
+    skippedPaused: 0,
+    positionErrors: 0,
+    lastAccuracy: null,
+  });
+
+  // Счётчики копятся в памяти и раз в 20 секунд уходят одной строкой в журнал,
+  // чтобы не писать в IndexedDB на каждую точку GPS.
+  const flushDiagnostics = useCallback(
+    (force = false) => {
+      const counters = countersRef.current;
+      const now = Date.now();
+
+      if (!force && now - lastFlushAtRef.current < 20000) {
+        return;
+      }
+
+      const hasData = Object.entries(counters).some(
+        ([key, value]) => key !== "lastAccuracy" && value > 0,
+      );
+
+      if (!hasData) {
+        return;
+      }
+
+      lastFlushAtRef.current = now;
+      logDiagnostic("route-stats", {
+        expeditionId: currentExpeditionId,
+        ...counters,
+      });
+
+      countersRef.current = {
+        accepted: 0,
+        droppedAccuracy: 0,
+        skippedThrottle: 0,
+        skippedPaused: 0,
+        positionErrors: 0,
+        lastAccuracy: counters.lastAccuracy,
+      };
+    },
+    [currentExpeditionId],
+  );
 
   // Лист находки читает ключ при открытии: после настроек ему нужна свежая версия.
   const closeSettings = useCallback(() => {
@@ -127,16 +179,46 @@ function App() {
       const accuracy = pos.coords.accuracy ?? 0;
       setPosition(coordinates);
 
-      // Неточные точки (дома, в начале трека, в подворотне) не пишем в маршрут:
-      // они дают те самые «броски» линии через полкарты.
-      if (isWalking && !isPaused && accuracy <= MAX_ACCURACY_METERS) {
-        const isSegmentStart = pendingBreakRef.current;
-        setRoute((prevRoute) =>
-          appendRoutePoint(prevRoute, coordinates, { isSegmentStart }),
-        );
+      if (!isWalking) {
+        return;
       }
+
+      if (isPaused) {
+        countersRef.current.skippedPaused += 1;
+        return;
+      }
+
+      // Неточные точки (дома, в начале трека, в подворотне) не пишем в маршрут:
+      // они дают те самые «броски» линии через полкарту. Факт отбрасывания
+      // считаем, чтобы в поле понимать, сколько теряет фильтр.
+      if (accuracy > MAX_ACCURACY_METERS) {
+        countersRef.current.droppedAccuracy += 1;
+        countersRef.current.lastAccuracy = Math.round(accuracy);
+        flushDiagnostics();
+        return;
+      }
+
+      // watchPosition присылает обновления чаще, чем нужен шаг маршрута.
+      const now = Date.now();
+      if (now - lastAppendAtRef.current < MIN_POINT_INTERVAL_MS) {
+        countersRef.current.skippedThrottle += 1;
+        return;
+      }
+
+      lastAppendAtRef.current = now;
+      countersRef.current.accepted += 1;
+      countersRef.current.lastAccuracy = Math.round(accuracy);
+
+      const isSegmentStart = pendingBreakRef.current;
+      setRoute((prevRoute) =>
+        appendRoutePoint(prevRoute, coordinates, {
+          isSegmentStart,
+          accuracy,
+        }),
+      );
+      flushDiagnostics();
     },
-    [isWalking, isPaused],
+    [isWalking, isPaused, flushDiagnostics],
   );
 
   const startExpedition = async () => {
@@ -160,6 +242,11 @@ function App() {
       setIsFollowEnabled(true);
       setIsStartModalOpen(false);
       setView("map");
+      lastAppendAtRef.current = 0;
+      logDiagnostic("expedition-start", {
+        expeditionId: activeExpedition.id,
+        resumed: true,
+      });
       return;
     }
 
@@ -191,6 +278,8 @@ function App() {
     setExpeditionTitle("");
     setExpeditionGoal("");
     setView("map");
+    lastAppendAtRef.current = 0;
+    logDiagnostic("expedition-start", { expeditionId: id, resumed: false });
   };
 
   // Старт с карты: либо продолжаем активную экспедицию, либо заводим новую.
@@ -210,6 +299,8 @@ function App() {
   // после перезапуска приложение решит, что запись шла всё это время.
   const pauseWalk = async () => {
     setIsPaused(true);
+    flushDiagnostics(true);
+    logDiagnostic("pause", { expeditionId: currentExpeditionId });
 
     if (!currentExpeditionId) {
       return;
@@ -237,6 +328,7 @@ function App() {
     setIsFollowEnabled(true);
     // Первая точка после паузы начнёт новый сегмент — на карте будет видно, где стояли.
     pendingBreakRef.current = true;
+    logDiagnostic("resume-tracking", { expeditionId: currentExpeditionId });
 
     if (!currentExpeditionId) {
       return;
@@ -275,6 +367,12 @@ function App() {
     setIsWalking(false);
     setIsPaused(false);
     pendingBreakRef.current = false;
+    lastAppendAtRef.current = 0;
+    flushDiagnostics(true);
+    logDiagnostic("finish", {
+      expeditionId: currentExpeditionId,
+      points: route.length,
+    });
     setCurrentExpeditionId(null);
   };
 
@@ -311,6 +409,8 @@ function App() {
 
     // Продолжение после «Остановить» — тоже разрыв, даже если прошло две минуты.
     pendingBreakRef.current = true;
+    lastAppendAtRef.current = 0;
+    logDiagnostic("expedition-resume", { expeditionId });
   };
 
   const handleImageChange = async (e) => {
@@ -601,24 +701,81 @@ function App() {
       return;
     }
 
-    navigator.geolocation.getCurrentPosition(
+    // Ошибки watchPosition могут идти пачкой (нет сигнала в метро) — не спамим.
+    let lastErrorNotifyAt = 0;
+
+    const handleError = (error) => {
+      countersRef.current.positionErrors += 1;
+      logDiagnostic("position-error", {
+        expeditionId: currentExpeditionId,
+        code: error.code,
+        message: error.message,
+      });
+
+      const now = Date.now();
+      if (now - lastErrorNotifyAt > 30000) {
+        lastErrorNotifyAt = now;
+        notify(`Не получили координаты: ${error.message}`, { tone: "error" });
+      }
+    };
+
+    if (!isWalking || isPaused) {
+      navigator.geolocation.getCurrentPosition(updatePosition, handleError, {
+        enableHighAccuracy: true,
+      });
+      return;
+    }
+
+    // watchPosition вместо таймера: система сама присылает обновления и лучше
+    // переживает уход страницы в фон, чем setInterval.
+    logDiagnostic("watch-start", { expeditionId: currentExpeditionId });
+
+    const watchId = navigator.geolocation.watchPosition(
       updatePosition,
-      (err) => {
-        notify(`Не получили координаты: ${err.message}`, { tone: "error" });
-      },
-      { enableHighAccuracy: true },
+      handleError,
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 20000 },
     );
 
-    let timer;
-    if (isWalking && !isPaused) {
-      timer = setInterval(() => {
-        navigator.geolocation.getCurrentPosition(updatePosition, null, {
-          enableHighAccuracy: true,
-        });
-      }, 5000);
-    }
-    return () => clearInterval(timer);
-  }, [isWalking, isPaused, updatePosition, notify]);
+    return () => {
+      navigator.geolocation.clearWatch(watchId);
+      flushDiagnostics(true);
+      logDiagnostic("watch-stop", { expeditionId: currentExpeditionId });
+    };
+  }, [
+    isWalking,
+    isPaused,
+    updatePosition,
+    notify,
+    flushDiagnostics,
+    currentExpeditionId,
+  ]);
+
+  // Журнал фона: по нему видно, когда страница уходила в фон и возвращалась.
+  useEffect(() => {
+    const handleVisibility = () =>
+      logDiagnostic("visibility", { state: document.visibilityState });
+    const handlePageHide = () => {
+      flushDiagnostics(true);
+      logDiagnostic("pagehide", {});
+    };
+    const handlePageShow = () => logDiagnostic("pageshow", {});
+    const handleFreeze = () => logDiagnostic("freeze", {});
+    const handleResume = () => logDiagnostic("resume", {});
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("pagehide", handlePageHide);
+    window.addEventListener("pageshow", handlePageShow);
+    document.addEventListener("freeze", handleFreeze);
+    document.addEventListener("resume", handleResume);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("pagehide", handlePageHide);
+      window.removeEventListener("pageshow", handlePageShow);
+      document.removeEventListener("freeze", handleFreeze);
+      document.removeEventListener("resume", handleResume);
+    };
+  }, [flushDiagnostics]);
 
   const summaryExpedition = expeditions.find(
     (expedition) => expedition.id === summaryExpeditionId,

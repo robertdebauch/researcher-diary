@@ -13,6 +13,11 @@ db.version(2).stores({
   recognitionCache: "hash",
 });
 
+// v3: журнал диагностики — что происходило с записью маршрута в поле.
+db.version(3).stores({
+  diagnostics: "++id, time, type",
+});
+
 /** Настройки — простые пары ключ/значение (ключ Gemini, согласие, квота). */
 export async function getSetting(key) {
   const row = await db.settings.get(key);
@@ -24,25 +29,34 @@ export async function setSetting(key, value) {
 }
 
 /** Версия формата бэкапа, которую умеет читать текущая сборка. */
-const BACKUP_FORMAT_VERSION = 1;
+const BACKUP_FORMAT_VERSION = 2;
 
 export async function clearAllData() {
-  // Одна транзакция: либо очищаем обе таблицы, либо не трогаем ничего.
-  await db.transaction("rw", db.expeditions, db.findings, async () => {
-    await db.expeditions.clear();
-    await db.findings.clear();
-  });
+  // Одна транзакция: либо очищаем все таблицы, либо не трогаем ничего.
+  await db.transaction(
+    "rw",
+    db.expeditions,
+    db.findings,
+    db.diagnostics,
+    async () => {
+      await db.expeditions.clear();
+      await db.findings.clear();
+      await db.diagnostics.clear();
+    },
+  );
 }
 
 export async function exportAllData() {
   const expeditions = await db.expeditions.toArray();
   const findings = await db.findings.toArray();
+  const diagnostics = await db.diagnostics.toArray();
 
   return {
     version: BACKUP_FORMAT_VERSION,
     exportedAt: new Date().toISOString(),
     expeditions,
     findings,
+    diagnostics,
   };
 }
 
@@ -62,11 +76,23 @@ export async function importAllData(data) {
 
   // Всё в одной транзакции: если запись упадёт (квота, битые данные),
   // старые данные не будут стёрты.
-  await db.transaction("rw", db.expeditions, db.findings, async () => {
-    await db.expeditions.clear();
-    await db.findings.clear();
-    await db.expeditions.bulkPut(data.expeditions);
-    await db.findings.bulkPut(data.findings);
-  });
+  await db.transaction(
+    "rw",
+    db.expeditions,
+    db.findings,
+    db.diagnostics,
+    async () => {
+      await db.expeditions.clear();
+      await db.findings.clear();
+      await db.diagnostics.clear();
+      await db.expeditions.bulkPut(data.expeditions);
+      await db.findings.bulkPut(data.findings);
+
+      // Бэкапы версии 1 журнала не содержат — это нормально.
+      if (Array.isArray(data.diagnostics)) {
+        await db.diagnostics.bulkPut(data.diagnostics);
+      }
+    },
+  );
 }
 

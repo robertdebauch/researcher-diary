@@ -106,7 +106,8 @@ check(
   appendRoutePoint(routeWithOnePoint, [55.751, 37.61]).length,
   2,
 );
-check("формат точки содержит время", routeWithOnePoint[0].length, 3);
+check("формат точки: пять полей", routeWithOnePoint[0].length, 5);
+check("формат точки: время во втором индексе", typeof routeWithOnePoint[0][2], "number");
 check(
   "1 градус широты ~ 111 км",
   Math.round(calculateDistance([0, 0], [1, 0]) / 1000),
@@ -312,7 +313,7 @@ const flaggedRoute = [
     true,
   ),
 ];
-check("флаг: точка помечена", flaggedRoute[1].length, 4);
+check("флаг: точка помечена", flaggedRoute[1][3], 1);
 check(
   "флаг: короткая пауза рвёт линию",
   splitRouteIntoSegments(flaggedRoute).length,
@@ -344,9 +345,11 @@ check("подпись 12 мин", formatGapDuration(12 * 60 * 1000), "12 мин"
 check("подпись 1 ч", formatGapDuration(60 * 60 * 1000), "1 ч");
 check("подпись 1 ч 12 мин", formatGapDuration(72 * 60 * 1000), "1 ч 12 мин");
 
-// 19. Leaflet: точка с флагом (4 элемента) отдаётся ему парой координат.
+// 19б. Точность хранится пятым полем (для полевой диагностики).
+const accuracyRoute = appendRoutePoint([], [55.75, 37.61], { accuracy: 12 });
+check("точность записана", accuracyRoute[0][4], 12);
 const leafletPositions = toLeafletPositions(flaggedRoute);
-check("leaflet: 4 элемента обрезаны", leafletPositions[1].length, 2);
+check("leaflet: лишние поля обрезаны", leafletPositions[1].length, 2);
 check("leaflet: координаты сохранены", leafletPositions[1][0], flaggedRoute[1][0]);
 
 console.log(results.join("\n"));
