@@ -42,6 +42,8 @@ dist-ssr
 /AGENT-RULES.md
 /DECISIONS.md
 /BACKLOG.md
+/UI-BUTTONS.md
+/FIELD-TEST-19.11.md
 .env
 
 # Конфиги инструментов намеренно не в репозитории (решение Роберта, коммит df80773).
