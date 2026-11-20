@@ -44,6 +44,7 @@ dist-ssr
 /BACKLOG.md
 /UI-BUTTONS.md
 /FIELD-TEST-19.11.md
+/DESIGN-BOOK-NOTES.md
 .env
 
 # Конфиги инструментов намеренно не в репозитории (решение Роберта, коммит df80773).
