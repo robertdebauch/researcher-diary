@@ -125,17 +125,34 @@ const jitterStats = calculateRouteStats(jitterRoute);
 check("остановка: дистанция (км)", jitterStats.distanceKm, "0.00");
 check("остановка: время в движении (с)", jitterStats.movingMs / 1000, "0");
 
-// 7. Длинная пауза (5 минут между точками) — не движение, даже если смещение есть.
-const pausedRoute = [
+// 7. Редкие точки: 5 минут между точками и 100 м смещения — это ходьба 1.2 км/ч.
+// Раньше такие отрезки выбрасывались по порогу 30 с, и фоновая запись исчезала
+// из дистанции целиком. Осознанная пауза отсекается флагом, а не временем.
+const sparseRoute = [
   createRoutePoint(55.75, 37.61, startTime),
   createRoutePoint(55.75 + metersToLatitude(100), 37.61, startTime + 300000),
 ];
-check("пауза: дистанция (км)", calculateRouteStats(pausedRoute).distanceKm, "0.00");
-check(
-  "пауза: время в движении (с)",
-  calculateRouteStats(pausedRoute).movingMs / 1000,
-  "0",
-);
+const sparseStats = calculateRouteStats(sparseRoute);
+check("редкие точки: дистанция (км)", sparseStats.distanceKm, "0.10");
+check("редкие точки: время (с)", sparseStats.movingMs / 1000, "300");
+
+// 7б. Та же пара точек, но с флагом ручной паузы — не считается вообще.
+const flaggedSparseRoute = [
+  createRoutePoint(55.75, 37.61, startTime),
+  createRoutePoint(55.75 + metersToLatitude(100), 37.61, startTime + 300000, true),
+];
+const flaggedSparseStats = calculateRouteStats(flaggedSparseRoute);
+check("флаг паузы: дистанция (км)", flaggedSparseStats.distanceKm, "0.00");
+check("флаг паузы: время (с)", flaggedSparseStats.movingMs / 1000, "0");
+
+// 7в. Простой: 29 м за три часа (как в зале на полевом тесте) — не движение.
+const idleRoute = [
+  createRoutePoint(55.75, 37.61, startTime),
+  createRoutePoint(55.75 + metersToLatitude(29), 37.61, startTime + 3 * 60 * 60 * 1000),
+];
+const idleStats = calculateRouteStats(idleRoute);
+check("простой 3 ч: пешком (км)", idleStats.distanceKm, "0.00");
+check("простой 3 ч: транспорт (км)", idleStats.transportKm, "0.00");
 
 // 8. Короткий интервал движения считается как обычно: 30 м за 20 с.
 const shortGapRoute = [
@@ -152,6 +169,30 @@ check(
   calculateRouteStats(shortGapRoute).movingMs / 1000,
   "20",
 );
+
+// 8б. Транспорт: 1 км за 2 минуты (30 км/ч) — не пешая дистанция, а «транспорт».
+const busRoute = [
+  createRoutePoint(55.75, 37.61, startTime),
+  createRoutePoint(55.75 + metersToLatitude(1000), 37.61, startTime + 120000),
+];
+const busStats = calculateRouteStats(busRoute);
+check("автобус: пешком (км)", busStats.distanceKm, "0.00");
+check("автобус: транспорт (км)", busStats.transportKm, "1.00");
+check("автобус: транспорт время (с)", busStats.transportMs / 1000, "120");
+
+// 8в. Граница транспорта (12 км/ч): 10 км/ч — пешком, 20 км/ч — транспорт.
+const slowRoute = [
+  createRoutePoint(55.75, 37.61, startTime),
+  createRoutePoint(55.75 + metersToLatitude(100), 37.61, startTime + 36000),
+];
+const fastRoute = [
+  createRoutePoint(55.75, 37.61, startTime),
+  createRoutePoint(55.75 + metersToLatitude(100), 37.61, startTime + 18000),
+];
+check("10 км/ч: пешком (км)", calculateRouteStats(slowRoute).distanceKm, "0.10");
+check("10 км/ч: транспорт (км)", calculateRouteStats(slowRoute).transportKm, "0.00");
+check("20 км/ч: пешком (км)", calculateRouteStats(fastRoute).distanceKm, "0.00");
+check("20 км/ч: транспорт (км)", calculateRouteStats(fastRoute).transportKm, "0.10");
 
 // 9. Порог записи точки: ближе 3 м — шум, дальше — движение.
 const singlePointRoute = appendRoutePoint([], [55.75, 37.61]);

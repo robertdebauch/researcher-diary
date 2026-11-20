@@ -34,9 +34,13 @@ function SummaryView({ expedition, findings, onBack, onResume, onDelete, canResu
 
   const isGoalReached = findings.some((finding) => finding.isGoal);
 
-  const { distanceMeters, distanceKm, movingMs } = calculateRouteStats(
-    expedition.path,
-  );
+  const {
+    distanceMeters,
+    distanceKm,
+    movingMs,
+    transportMeters,
+    transportKm,
+  } = calculateRouteStats(expedition.path);
 
   // Скорость — по времени в движении, а не по общему времени прогулки.
   const averageSpeed =
@@ -75,7 +79,7 @@ function SummaryView({ expedition, findings, onBack, onResume, onDelete, canResu
 
         <div className="stats__cell">
           <div className="stats__value">{distanceKm}</div>
-          <div className="stats__label">Км пути</div>
+          <div className="stats__label">Км пешком</div>
         </div>
 
         <div className="stats__cell">
@@ -92,6 +96,12 @@ function SummaryView({ expedition, findings, onBack, onResume, onDelete, canResu
           <div className="stats__label">Цель</div>
         </div>
       </section>
+
+      {transportMeters > 50 && (
+        <p className="label report-transport">
+          В транспорте · {transportKm} км
+        </p>
+      )}
 
       <section className="section">
         {/* Число находок уже стоит в «выборке» — здесь только название раздела. */}

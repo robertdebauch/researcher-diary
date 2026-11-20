@@ -22,9 +22,14 @@ export const MAX_BREAK_DASH_METERS = 300;
 // GPS на месте (5–10 м за 5 секунд выглядят как 3–7 км/ч и портят среднюю скорость).
 const MIN_MOVEMENT_SPEED_KMPH = 1;
 
-// Если между точками прошло больше этого времени, считаем, что была пауза
-// (фон, потеря сигнала): дистанция и время такого отрезка в статистику не идут.
-const MAX_SAMPLE_GAP_MS = 30000;
+// Предел разрыва, который ещё имеет смысл считать движением. Раньше здесь было
+// 30 секунд, и любая фоновая прореженная запись (точка раз в 1–5 минут) выпадала
+// из дистанции целиком. Осознанные паузы отсекаются флагом в точке, а не временем.
+const MAX_STATS_GAP_MS = 30 * 60 * 1000;
+
+// Выше этой средней скорости считаем, что человек ехал, а не шёл: такие отрезки
+// идут в отдельный счётчик «транспорт» и не раздувают пешую дистанцию.
+export const TRANSPORT_SPEED_KMPH = 12;
 
 // Не пишем точку, если она ближе этого расстояния к предыдущей — это шум приёма,
 // а не перемещение. Заодно уменьшает «пилу» на линии.
@@ -154,19 +159,28 @@ function isTimeGap(point1, point2) {
   return endTime - startTime > SEGMENT_GAP_MS;
 }
 
+function getSegmentSpeedKmph(point1, point2, elapsedMs) {
+  return (calculateDistance(point1, point2) * 3600) / elapsedMs;
+}
+
 /**
- * Отрезок считается движением, если человек действительно шёл:
- * скорость в разумных пределах и между точками нет длинной паузы.
+ * Отрезок считается движением, если человек действительно перемещался:
+ * - первая точка после ручной паузы всегда разрыв (флаг), независимо от времени;
+ * - разрыв больше MAX_STATS_GAP_MS не считаем вовсе;
+ * - скорость в пределах от MIN_MOVEMENT_SPEED_KMPH до MAX_WALKING_SPEED_KMPH.
  */
 function isMovementSegment(point1, point2) {
-  const elapsedMs = resolveElapsedMs(point1, point2);
-
-  if (elapsedMs <= 0 || elapsedMs > MAX_SAMPLE_GAP_MS) {
+  if (isSegmentStartPoint(point2)) {
     return false;
   }
 
-  const distanceMeters = calculateDistance(point1, point2);
-  const speedKmph = (distanceMeters * 3600) / elapsedMs;
+  const elapsedMs = resolveElapsedMs(point1, point2);
+
+  if (elapsedMs <= 0 || elapsedMs > MAX_STATS_GAP_MS) {
+    return false;
+  }
+
+  const speedKmph = getSegmentSpeedKmph(point1, point2, elapsedMs);
 
   return (
     speedKmph >= MIN_MOVEMENT_SPEED_KMPH &&
@@ -175,17 +189,29 @@ function isMovementSegment(point1, point2) {
 }
 
 /**
- * Дистанция и время в движении по маршруту.
- * В расчёт идут только отрезки реального движения: дрожь на месте и паузы
- * (долгие разрывы между точками) не раздувают ни дистанцию, ни время.
+ * Дистанция и время по маршруту, раздельно для ходьбы и транспорта.
+ * В расчёт идут отрезки реального перемещения; ручные паузы и долгие простои
+ * не раздувают ни дистанцию, ни время. Транспорт (быстрее TRANSPORT_SPEED_KMPH)
+ * не попадает в пешую дистанцию, чтобы автобус не притворялся ходьбой.
  */
 export function calculateRouteStats(path) {
+  const emptyStats = {
+    distanceMeters: 0,
+    distanceKm: "0.00",
+    movingMs: 0,
+    transportMeters: 0,
+    transportKm: "0.00",
+    transportMs: 0,
+  };
+
   if (!path || path.length < 2) {
-    return { distanceMeters: 0, distanceKm: "0.00", movingMs: 0 };
+    return emptyStats;
   }
 
-  let distanceMeters = 0;
-  let movingMs = 0;
+  let walkingMeters = 0;
+  let walkingMs = 0;
+  let transportMeters = 0;
+  let transportMs = 0;
 
   for (let i = 0; i < path.length - 1; i++) {
     const startPoint = path[i];
@@ -195,14 +221,26 @@ export function calculateRouteStats(path) {
       continue;
     }
 
-    distanceMeters += calculateDistance(startPoint, endPoint);
-    movingMs += resolveElapsedMs(startPoint, endPoint);
+    const elapsedMs = resolveElapsedMs(startPoint, endPoint);
+    const distanceMeters = calculateDistance(startPoint, endPoint);
+    const speedKmph = getSegmentSpeedKmph(startPoint, endPoint, elapsedMs);
+
+    if (speedKmph > TRANSPORT_SPEED_KMPH) {
+      transportMeters += distanceMeters;
+      transportMs += elapsedMs;
+    } else {
+      walkingMeters += distanceMeters;
+      walkingMs += elapsedMs;
+    }
   }
 
   return {
-    distanceMeters,
-    distanceKm: (distanceMeters / 1000).toFixed(2),
-    movingMs,
+    distanceMeters: walkingMeters,
+    distanceKm: (walkingMeters / 1000).toFixed(2),
+    movingMs: walkingMs,
+    transportMeters,
+    transportKm: (transportMeters / 1000).toFixed(2),
+    transportMs,
   };
 }
 
