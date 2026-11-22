@@ -10,6 +10,7 @@ import {
   createRoutePoint,
   filterImplausiblePoints,
   formatGapDuration,
+  getGapReason,
   getRouteBreaks,
   isResumableExpedition,
   RESUME_WINDOW_MS,
@@ -457,6 +458,38 @@ check(
   "прогоны: устойчивый транспорт",
   splitRouteIntoRuns(sustainedBusRoute).at(-1).mode,
   "transport",
+);
+
+// 21. Причина разрыва по журналу диагностики.
+const gapStart = startTime;
+const gapEnd = startTime + 10 * 60 * 1000;
+const screenOffLog = [
+  {
+    time: new Date(gapStart + 1000),
+    type: "visibility",
+    details: { state: "hidden" },
+  },
+  { time: new Date(gapStart + 2000), type: "freeze", details: {} },
+];
+check(
+  "разрыв: экран был выключен",
+  getGapReason(gapStart, gapEnd, screenOffLog),
+  "screen-off",
+);
+check(
+  "разрыв: приложение закрыто",
+  getGapReason(gapStart, gapEnd, [
+    { time: new Date(gapStart + 1000), type: "pagehide", details: {} },
+  ]),
+  "app-closed",
+);
+check("разрыв: журнала нет", getGapReason(gapStart, gapEnd, []), "unknown");
+check(
+  "разрыв: события вне интервала не учитываются",
+  getGapReason(gapStart, gapEnd, [
+    { time: new Date(gapStart - 5000), type: "freeze", details: {} },
+  ]),
+  "unknown",
 );
 
 console.log(results.join("\n"));

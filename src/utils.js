@@ -406,6 +406,40 @@ export function getRouteBreaks(path) {
   return breaks;
 }
 
+/**
+ * Почему запись прервалась — по журналу диагностики между точками разрыва.
+ * Возвращает "app-closed", "screen-off" или "unknown".
+ */
+export function getGapReason(fromMs, toMs, diagnostics) {
+  if (!Array.isArray(diagnostics) || diagnostics.length === 0) {
+    return "unknown";
+  }
+
+  let sawScreenOff = false;
+
+  for (const row of diagnostics) {
+    const time = new Date(row.time).getTime();
+
+    if (!Number.isFinite(time) || time < fromMs || time > toMs) {
+      continue;
+    }
+
+    if (row.type === "pagehide") {
+      return "app-closed";
+    }
+
+    const isHidden =
+      row.type === "freeze" ||
+      (row.type === "visibility" && row.details?.state === "hidden");
+
+    if (isHidden) {
+      sawScreenOff = true;
+    }
+  }
+
+  return sawScreenOff ? "screen-off" : "unknown";
+}
+
 /** «40 сек», «12 мин», «1 ч 12 мин» — для попапа разрыва. */
 export function formatGapDuration(durationMs) {
   const seconds = Math.max(1, Math.round(durationMs / 1000));

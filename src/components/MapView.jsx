@@ -19,6 +19,7 @@ import {
   formatGapDuration,
   getFindingDescription,
   getFindingName,
+  getGapReason,
   getRouteBreaks,
   MAX_BREAK_DASH_METERS,
   simplifyPath,
@@ -45,6 +46,14 @@ function buildCartoTileUrl(showLabels) {
 // потому что Leaflet не умеет читать CSS-переменные в атрибутах SVG.
 const BREAK_COLOR = "#8a8a8a";
 
+// Причина разрыва: пауза по кнопке, выключенный экран или закрытое приложение.
+const GAP_REASON_LABELS = {
+  pause: "Пауза",
+  "app-closed": "Приложение было закрыто",
+  "screen-off": "Экран был выключен",
+  unknown: "Нет данных",
+};
+
 const BREAK_ICON = L.divIcon({
   className: "route-break",
   html: "",
@@ -52,9 +61,13 @@ const BREAK_ICON = L.divIcon({
   iconAnchor: [5, 5],
 });
 
-/** Подпись разрыва: «Пауза · 12 мин · 14:20–14:32» или «Нет данных · 1 ч 12 мин». */
-function describeBreak(routeBreak) {
-  const label = routeBreak.isPause ? "Пауза" : "Нет данных";
+/** Подпись разрыва: «Пауза · 12 мин · 14:20–14:32» или «Экран был выключен · 1 ч 12 мин». */
+function describeBreak(routeBreak, diagnostics) {
+  const reason = routeBreak.isPause
+    ? "pause"
+    : getGapReason(routeBreak.from[2], routeBreak.to[2], diagnostics);
+
+  const label = GAP_REASON_LABELS[reason] ?? GAP_REASON_LABELS.unknown;
   const duration = formatGapDuration(routeBreak.durationMs);
   const range = formatBreakTimeRange(routeBreak.from, routeBreak.to);
 
@@ -123,6 +136,7 @@ function MapView({
   position,
   route,
   findings,
+  diagnostics,
   isWalking,
   isPaused,
   onStart,
@@ -310,7 +324,7 @@ function MapView({
                 icon={BREAK_ICON}
               >
                 <Popup className="break-popup">
-                  {describeBreak(routeBreak)}
+                  {describeBreak(routeBreak, diagnostics)}
                 </Popup>
               </Marker>
             </Fragment>

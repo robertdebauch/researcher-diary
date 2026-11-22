@@ -45,6 +45,7 @@ function App() {
   const [findingImage, setFindingImage] = useState(null);
   const [isGoal, setIsGoal] = useState(false);
   const [summaryExpeditionId, setSummaryExpeditionId] = useState(null);
+  const [diagnostics, setDiagnostics] = useState([]);
   // Автопрокрутка карты за пользователем. Живёт в App, чтобы сбрасываться
   // в момент старта/открытия экспедиции, а не в эффекте MapView.
   const [isFollowEnabled, setIsFollowEnabled] = useState(true);
@@ -148,6 +149,37 @@ function App() {
       }
     }
     loadData();
+  }, []);
+
+  // Журнал нужен карте, чтобы объяснять причины разрывов: «экран был выключен».
+  useEffect(() => {
+    let isCancelled = false;
+
+    async function loadDiagnostics() {
+      const rows = await db.diagnostics
+        .orderBy("id")
+        .reverse()
+        .limit(500)
+        .toArray();
+
+      if (!isCancelled) {
+        setDiagnostics(rows.reverse());
+      }
+    }
+
+    function handleVisibility() {
+      if (document.visibilityState === "visible") {
+        loadDiagnostics();
+      }
+    }
+
+    loadDiagnostics();
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    return () => {
+      isCancelled = true;
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
   }, []);
 
   const selectExpedition = (expedition) => {
@@ -822,6 +854,7 @@ function App() {
             position={position}
             route={route}
             findings={findings}
+            diagnostics={diagnostics}
             isWalking={isWalking}
             isPaused={isPaused}
             onStart={startWalk}
