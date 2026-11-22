@@ -46,6 +46,9 @@
   /* Маршрут на карте — «чернила», а не акцент: на состаренной карте так читаемее. */
   --route-color: #141414;
 
+  /* Транспорт — синий, чтобы отличать от пешего пути (временно, для полевых тестов). */
+  --route-transport: #3b82f6;
+
   /* Разрыв маршрута (пауза, потеря данных) — приглушённая линия и знак ‖. */
   --route-break: #8a8a8a;
 }
@@ -706,6 +709,15 @@ button {
   stroke-opacity: 0.9;
 }
 
+/* Прогоны маршрута: пешком — чернила, транспорт — синий (временно, для тестов). */
+.leaflet-overlay-pane path.route-run--walk {
+  stroke: var(--route-color);
+}
+
+.leaflet-overlay-pane path.route-run--transport {
+  stroke: var(--route-transport);
+}
+
 /* Пунктир «здесь данных нет»: волосяная линия, а не маршрут. */
 .leaflet-overlay-pane path.route-break-line {
   stroke: var(--route-break);
@@ -714,15 +726,21 @@ button {
   stroke-dasharray: 2 6;
 }
 
-/* Знак разрыва: две волосяные черты (‖). Акцент не используем — это не действие. */
+/* Знак разрыва: белая плашка с двумя волосками — читается на серой карте. */
 .route-break {
-  width: 8px;
-  height: 8px;
-  background: none;
-  border: 0;
-  border-left: 1px solid var(--route-break);
-  border-right: 1px solid var(--route-break);
+  width: 10px;
+  height: 10px;
+  background: #fff;
+  border: 1px solid var(--route-color);
   box-sizing: border-box;
+}
+
+.route-break::after {
+  content: "";
+  position: absolute;
+  inset: 2px 3px;
+  border-left: 1px solid var(--route-color);
+  border-right: 1px solid var(--route-color);
 }
 
 .break-popup .leaflet-popup-content {

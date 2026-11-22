@@ -22,10 +22,11 @@ export const MAX_BREAK_DASH_METERS = 300;
 // GPS на месте (5–10 м за 5 секунд выглядят как 3–7 км/ч и портят среднюю скорость).
 const MIN_MOVEMENT_SPEED_KMPH = 1;
 
-// Предел разрыва, который ещё имеет смысл считать движением. Раньше здесь было
-// 30 секунд, и любая фоновая прореженная запись (точка раз в 1–5 минут) выпадала
-// из дистанции целиком. Осознанные паузы отсекаются флагом в точке, а не временем.
-const MAX_STATS_GAP_MS = 30 * 60 * 1000;
+// Пределы разрыва для статистики. Ходьбу считаем при разрыве не больше 30 минут,
+// транспорт — до часа: иначе утренний автобус 9 км за 43 минуты выпадал из отчёта.
+// Осознанные паузы отсекаются флагом в точке, а не временем.
+const MAX_WALKING_GAP_MS = 30 * 60 * 1000;
+const MAX_TRANSPORT_GAP_MS = 60 * 60 * 1000;
 
 // Выше этой средней скорости считаем, что человек ехал, а не шёл: такие отрезки
 // идут в отдельный счётчик «транспорт» и не раздувают пешую дистанцию.
@@ -175,28 +176,39 @@ function getSegmentSpeedKmph(point1, point2, elapsedMs) {
 }
 
 /**
- * Отрезок считается движением, если человек действительно перемещался:
- * - первая точка после ручной паузы всегда разрыв (флаг), независимо от времени;
- * - разрыв больше MAX_STATS_GAP_MS не считаем вовсе;
- * - скорость в пределах от MIN_MOVEMENT_SPEED_KMPH до MAX_WALKING_SPEED_KMPH.
+ * Классифицирует отрезок для статистики: пешком, транспорт или «не движение».
+ * Ручная пауза (флаг) отсекается всегда; разрыв ограничен по-разному для
+ * ходьбы (30 мин) и транспорта (60 мин).
  */
-function isMovementSegment(point1, point2) {
+function classifyRouteSegment(point1, point2) {
   if (isSegmentStartPoint(point2)) {
-    return false;
+    return null;
   }
 
   const elapsedMs = resolveElapsedMs(point1, point2);
 
-  if (elapsedMs <= 0 || elapsedMs > MAX_STATS_GAP_MS) {
-    return false;
+  if (elapsedMs <= 0) {
+    return null;
   }
 
+  const distanceMeters = calculateDistance(point1, point2);
   const speedKmph = getSegmentSpeedKmph(point1, point2, elapsedMs);
 
-  return (
-    speedKmph >= MIN_MOVEMENT_SPEED_KMPH &&
-    speedKmph <= MAX_WALKING_SPEED_KMPH
-  );
+  if (
+    speedKmph < MIN_MOVEMENT_SPEED_KMPH ||
+    speedKmph > MAX_WALKING_SPEED_KMPH
+  ) {
+    return null;
+  }
+
+  const mode = speedKmph > TRANSPORT_SPEED_KMPH ? "transport" : "walk";
+  const maxGapMs = mode === "transport" ? MAX_TRANSPORT_GAP_MS : MAX_WALKING_GAP_MS;
+
+  if (elapsedMs > maxGapMs) {
+    return null;
+  }
+
+  return { mode, elapsedMs, distanceMeters, speedKmph };
 }
 
 /**
@@ -225,23 +237,18 @@ export function calculateRouteStats(path) {
   let transportMs = 0;
 
   for (let i = 0; i < path.length - 1; i++) {
-    const startPoint = path[i];
-    const endPoint = path[i + 1];
+    const segment = classifyRouteSegment(path[i], path[i + 1]);
 
-    if (!isMovementSegment(startPoint, endPoint)) {
+    if (!segment) {
       continue;
     }
 
-    const elapsedMs = resolveElapsedMs(startPoint, endPoint);
-    const distanceMeters = calculateDistance(startPoint, endPoint);
-    const speedKmph = getSegmentSpeedKmph(startPoint, endPoint, elapsedMs);
-
-    if (speedKmph > TRANSPORT_SPEED_KMPH) {
-      transportMeters += distanceMeters;
-      transportMs += elapsedMs;
+    if (segment.mode === "transport") {
+      transportMeters += segment.distanceMeters;
+      transportMs += segment.elapsedMs;
     } else {
-      walkingMeters += distanceMeters;
-      walkingMs += elapsedMs;
+      walkingMeters += segment.distanceMeters;
+      walkingMs += segment.elapsedMs;
     }
   }
 
@@ -288,6 +295,83 @@ export function splitRouteIntoSegments(path) {
   }
 
   return segments;
+}
+
+// Чтобы дрожь GPS не красила пеший путь в «транспорт», режим засчитываем только
+// при устойчивом движении: минимум минута и 150 метров.
+const MIN_TRANSPORT_RUN_MS = 60 * 1000;
+const MIN_TRANSPORT_RUN_METERS = 150;
+
+/**
+ * Делит маршрут на «прогоны» одинакового режима: пешком или транспорт.
+ * Новый прогон начинается на паузе (флаг), временном разрыве, неправдоподобном
+ * прыжке и при смене режима. Короткие быстрые всплески (дрожь GPS) считаем
+ * пешими, чтобы линия не мигала синим.
+ */
+export function splitRouteIntoRuns(path) {
+  if (!path || path.length === 0) {
+    return [];
+  }
+
+  const runs = [];
+  let current = { mode: "walk", points: [path[0]] };
+
+  for (let index = 1; index < path.length; index += 1) {
+    const previous = path[index - 1];
+    const point = path[index];
+
+    const elapsedMs = resolveElapsedMs(previous, point);
+    const distanceMeters = calculateDistance(previous, point);
+    const speedKmph =
+      elapsedMs > 0 ? (distanceMeters * 3600) / elapsedMs : Infinity;
+
+    const startsNewRun =
+      isSegmentStartPoint(point) ||
+      isTimeGap(previous, point) ||
+      speedKmph > MAX_WALKING_SPEED_KMPH;
+
+    const mode = speedKmph > TRANSPORT_SPEED_KMPH ? "transport" : "walk";
+
+    if (startsNewRun) {
+      runs.push(current);
+      current = { mode, points: [point] };
+      continue;
+    }
+
+    if (mode !== current.mode) {
+      // Смена режима: граничную точку отдаём новому прогону, чтобы линии стыковались.
+      const boundary = current.points[current.points.length - 1];
+      runs.push(current);
+      current = { mode, points: [boundary, point] };
+      continue;
+    }
+
+    current.points.push(point);
+  }
+
+  runs.push(current);
+
+  return runs.map((run) => {
+    if (run.mode !== "transport") {
+      return run;
+    }
+
+    const first = run.points[0];
+    const last = run.points[run.points.length - 1];
+    const durationMs = (last[2] ?? 0) - (first[2] ?? 0);
+
+    let meters = 0;
+    for (let index = 1; index < run.points.length; index += 1) {
+      meters += calculateDistance(run.points[index - 1], run.points[index]);
+    }
+
+    const isSustained =
+      (durationMs >= MIN_TRANSPORT_RUN_MS ||
+        meters >= MIN_TRANSPORT_RUN_METERS) &&
+      meters > 0;
+
+    return isSustained ? run : { mode: "walk", points: run.points };
+  });
 }
 
 /**

@@ -14,6 +14,7 @@ import {
   isResumableExpedition,
   RESUME_WINDOW_MS,
   simplifyPath,
+  splitRouteIntoRuns,
   splitRouteIntoSegments,
   toLeafletPositions,
 } from "../src/utils.js";
@@ -195,6 +196,45 @@ check("10 км/ч: транспорт (км)", calculateRouteStats(slowRoute).tr
 check("20 км/ч: пешком (км)", calculateRouteStats(fastRoute).distanceKm, "0.00");
 check("20 км/ч: транспорт (км)", calculateRouteStats(fastRoute).transportKm, "0.10");
 
+// 8г. Транспорт с длинным разрывом: 9 км за 43 минуты (12.6 км/ч) считаем,
+// потому что для транспорта лимит разрыва — час, а не полчаса.
+const longBusRoute = [
+  createRoutePoint(55.75, 37.61, startTime),
+  createRoutePoint(
+    55.75 + metersToLatitude(9000),
+    37.61,
+    startTime + 43 * 60 * 1000,
+  ),
+];
+check(
+  "автобус 43 мин: транспорт (км)",
+  calculateRouteStats(longBusRoute).transportKm,
+  "8.99",
+);
+check(
+  "автобус 43 мин: пешком (км)",
+  calculateRouteStats(longBusRoute).distanceKm,
+  "0.00",
+);
+
+// 8д. Тот же разрыв, но пешком (5 км за 43 минуты, 7 км/ч) — не считаем:
+// для ходьбы лимит остаётся 30 минут.
+const longWalkRoute = [
+  createRoutePoint(55.75, 37.61, startTime),
+  createRoutePoint(
+    55.75 + metersToLatitude(5000),
+    37.61,
+    startTime + 43 * 60 * 1000,
+  ),
+];
+check(
+  "долгий разрыв, ходьба: пешком (км)",
+  calculateRouteStats(longWalkRoute).distanceKm,
+  "0.00",
+);
+
+// 8е. Проверка «паузы» на транспорте — см. после маршрута pauseGapRoute (пункт 11).
+
 // 9. Порог записи точки: ближе 3 м — шум, дальше — движение.
 const singlePointRoute = appendRoutePoint([], [55.75, 37.61]);
 check(
@@ -243,6 +283,12 @@ check(
   "пауза: дистанция через паузу не считается (км)",
   calculateRouteStats(pauseGapRoute).distanceKm,
   "0.01",
+);
+// Быстрый участок внутри разрыва — это транспорт, а не пешая дистанция.
+check(
+  "пауза: транспорт внутри разрыва (км)",
+  calculateRouteStats(pauseGapRoute).transportKm,
+  "1.27",
 );
 
 // 12. Короткий разрыв (минута) линию не рвёт: так выглядит троттлинг в фоне.
@@ -351,6 +397,67 @@ check("точность записана", accuracyRoute[0][4], 12);
 const leafletPositions = toLeafletPositions(flaggedRoute);
 check("leaflet: лишние поля обрезаны", leafletPositions[1].length, 2);
 check("leaflet: координаты сохранены", leafletPositions[1][0], flaggedRoute[1][0]);
+
+// 20. Прогоны по режимам: пешком → автобус → пешком.
+const modeRoute = [];
+let modeLatitude = 55.75;
+let modeTime = startTime;
+modeRoute.push(createRoutePoint(modeLatitude, 37.61, modeTime));
+for (let index = 0; index < 3; index += 1) {
+  modeLatitude += metersToLatitude(7);
+  modeTime += 5000;
+  modeRoute.push(createRoutePoint(modeLatitude, 37.61, modeTime));
+}
+for (let index = 0; index < 3; index += 1) {
+  modeLatitude += metersToLatitude(200); // 200 м за 30 с = 24 км/ч
+  modeTime += 30000;
+  modeRoute.push(createRoutePoint(modeLatitude, 37.61, modeTime));
+}
+for (let index = 0; index < 3; index += 1) {
+  modeLatitude += metersToLatitude(7);
+  modeTime += 5000;
+  modeRoute.push(createRoutePoint(modeLatitude, 37.61, modeTime));
+}
+
+const modeRuns = splitRouteIntoRuns(modeRoute);
+check("прогоны: режимы", modeRuns.map((run) => run.mode).join(","), "walk,transport,walk");
+check("прогоны: количество", modeRuns.length, 3);
+check(
+  "прогоны: граница 12 км/ч",
+  splitRouteIntoRuns([
+    createRoutePoint(55.75, 37.61, startTime),
+    createRoutePoint(55.75 + metersToLatitude(100), 37.61, startTime + 30000),
+  ])[0].mode,
+  "walk",
+);
+check("прогоны: флаг начинает новый", splitRouteIntoRuns(flaggedRoute).length, 2);
+check("прогоны: временной разрыв начинает новый", splitRouteIntoRuns(sparseRoute).length, 2);
+
+// 20б. Короткий быстрый всплеск — это дрожь GPS, линия остаётся пешей.
+const blipRoute = [
+  createRoutePoint(55.75, 37.61, startTime),
+  createRoutePoint(
+    55.75 + metersToLatitude(40),
+    37.61,
+    startTime + 4000,
+  ),
+];
+check("прогоны: быстрый всплеск не транспорт", splitRouteIntoRuns(blipRoute)[0].mode, "walk");
+
+// 20в. Устойчивый транспорт: 3 км за 3 минуты — синяя линия.
+const sustainedBusRoute = [
+  createRoutePoint(55.75, 37.61, startTime),
+  createRoutePoint(
+    55.75 + metersToLatitude(3000),
+    37.61,
+    startTime + 180000,
+  ),
+];
+check(
+  "прогоны: устойчивый транспорт",
+  splitRouteIntoRuns(sustainedBusRoute).at(-1).mode,
+  "transport",
+);
 
 console.log(results.join("\n"));
 

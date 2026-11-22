@@ -22,7 +22,7 @@ import {
   getRouteBreaks,
   MAX_BREAK_DASH_METERS,
   simplifyPath,
-  splitRouteIntoSegments,
+  splitRouteIntoRuns,
   toLeafletPositions,
 } from "../utils.js";
 
@@ -48,8 +48,8 @@ const BREAK_COLOR = "#8a8a8a";
 const BREAK_ICON = L.divIcon({
   className: "route-break",
   html: "",
-  iconSize: [8, 8],
-  iconAnchor: [4, 4],
+  iconSize: [10, 10],
+  iconAnchor: [5, 5],
 });
 
 /** Подпись разрыва: «Пауза · 12 мин · 14:20–14:32» или «Нет данных · 1 ч 12 мин». */
@@ -142,12 +142,15 @@ function MapView({
   // Подписи на карте выключены по умолчанию: чистая карта для исследования.
   const [showLabels, setShowLabels] = useState(false);
 
-  const routeSegments = useMemo(
+  // Прогоны одинакового режима: пешком и транспорт рисуются разным цветом.
+  const routeRuns = useMemo(
     () =>
-      splitRouteIntoSegments(route)
-        .map((segment) => filterImplausiblePoints(segment))
-        .map((segment) => simplifyPath(segment))
-        .filter((segment) => segment.length > 1),
+      splitRouteIntoRuns(route)
+        .map((run) => ({
+          mode: run.mode,
+          points: simplifyPath(filterImplausiblePoints(run.points)),
+        }))
+        .filter((run) => run.points.length > 1),
     [route],
   );
 
@@ -273,10 +276,13 @@ function MapView({
             <Popup>Вы здесь</Popup>
           </Marker>
 
-          {routeSegments.map((segment, index) => (
+          {routeRuns.map((run, index) => (
             <Polyline
-              key={`route-segment-${index}`}
-              positions={toLeafletPositions(segment)}
+              key={`route-run-${index}`}
+              positions={toLeafletPositions(run.points)}
+              pathOptions={{
+                className: `route-run route-run--${run.mode}`,
+              }}
             />
           ))}
 
