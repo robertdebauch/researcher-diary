@@ -7,6 +7,7 @@ import {
   appendRoutePoint,
   calculateDistance,
   calculateRouteStats,
+  canPersistRoute,
   createRoutePoint,
   filterImplausiblePoints,
   formatGapDuration,
@@ -485,11 +486,51 @@ check(
 );
 check("разрыв: журнала нет", getGapReason(gapStart, gapEnd, []), "unknown");
 check(
+  "разрыв: продолжение после остановки",
+  getGapReason(gapStart, gapEnd, [
+    { time: new Date(gapStart + 1000), type: "finish", details: {} },
+    {
+      time: new Date(gapStart + 2000),
+      type: "expedition-resume",
+      details: {},
+    },
+  ]),
+  "resumed",
+);
+check(
   "разрыв: события вне интервала не учитываются",
   getGapReason(gapStart, gapEnd, [
     { time: new Date(gapStart - 5000), type: "freeze", details: {} },
   ]),
   "unknown",
+);
+
+// 22. Пустой state не должен затирать сохранённый маршрут.
+check("пустой маршрут не пишем в базу", canPersistRoute([]), false);
+check("null не считаем маршрутом", canPersistRoute(null), false);
+check(
+  "непустой маршрут пишем",
+  canPersistRoute([[58, 56, 1, 0, 5]]),
+  true,
+);
+
+// 23. Транспорт, попавший в разрыв (экран был выключен), остаётся транспортом
+// в статистике, но линией не рисуется: между точками нет наблюдений.
+const gapRideStart = [58.0089969, 56.225668, startTime, 0, 4];
+const gapRideEnd = [57.999234, 56.1915505, startTime + 536000, 0, 24.5];
+const gapRideStats = calculateRouteStats([gapRideStart, gapRideEnd]);
+check(
+  "транспорт в разрыве учтён в статистике",
+  Number(gapRideStats.transportKm) > 2,
+  true,
+);
+check("транспорт в разрыве не даёт пеших км", gapRideStats.distanceKm, "0.00");
+check(
+  "транспорт в разрыве не даёт рисуемого прогона",
+  splitRouteIntoRuns([gapRideStart, gapRideEnd]).every(
+    (run) => run.points.length < 2,
+  ),
+  true,
 );
 
 console.log(results.join("\n"));

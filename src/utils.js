@@ -424,6 +424,11 @@ export function getGapReason(fromMs, toMs, diagnostics) {
       continue;
     }
 
+    // «Остановить» и сразу «Продолжить» — не пауза, а новый отрезок прогулки.
+    if (row.type === "expedition-resume") {
+      return "resumed";
+    }
+
     if (row.type === "pagehide") {
       return "app-closed";
     }
@@ -477,7 +482,13 @@ export function formatBreakTimeRange(point1, point2) {
   return `${format(startTime)}–${format(endTime)}`;
 }
 
-/** Убирает локальные выбросы GPS внутри сегмента, чтобы линия не «дёргалась». */
+/** Можно ли писать маршрут в базу: пустой массив — это «не загрузилось», а не «стёрли». */
+export function canPersistRoute(route) {
+  return Array.isArray(route) && route.length > 0;
+}
+
+/**
+ * Убирает локальные выбросы GPS внутри сегмента, чтобы линия не «дёргалась». */
 export function filterImplausiblePoints(points) {
   if (!points || points.length < 3) {
     return points ?? [];

@@ -773,9 +773,11 @@ button {
   overflow: visible;
 }
 
-.custom-marker-img {
-  width: 100%;
-  height: 100%;
+.custom-marker-icon .custom-marker-img {
+  /* Leaflet ставит маркерным img width: auto — из-за этого портретное фото
+     не заполняло круг и по бокам появлялись чёрные поля. */
+  width: 100% !important;
+  height: 100% !important;
   object-fit: cover;
 }
 

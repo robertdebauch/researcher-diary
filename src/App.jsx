@@ -17,6 +17,7 @@ import { logDiagnostic } from "./diagnostics";
 import {
   compressImage,
   appendRoutePoint,
+  canPersistRoute,
   isResumableExpedition,
   MAX_ACCURACY_METERS,
   ROUTE_SAVE_INTERVAL_MS,
@@ -59,6 +60,8 @@ function App() {
   // Первая точка после паузы помечается флагом разрыва — по нему рисуются
   // пунктир и знак паузы. Флаг снимаем, когда точка реально записалась.
   const pendingBreakRef = useRef(false);
+  const routeRef = useRef(route);
+  const lastRouteSaveRef = useRef(0);
 
   // watchPosition присылает обновления чаще, чем нужен шаг маршрута.
   const MIN_POINT_INTERVAL_MS = 4000;
@@ -73,6 +76,24 @@ function App() {
     positionErrors: 0,
     lastAccuracy: null,
   });
+
+  // Снимок маршрута в базу: страховка для ухода в фон и смены экрана.
+  // Пустой массив не пишем никогда — именно это затирало прогулку, когда
+  // из архива открывали активную экспедицию (в state путь был ещё пустым).
+  const persistRoute = useCallback(
+    (expeditionId = currentExpeditionId) => {
+      if (!expeditionId || !canPersistRoute(routeRef.current)) {
+        return;
+      }
+
+      db.expeditions
+        .update(expeditionId, { path: routeRef.current })
+        .catch((error) => {
+          console.error("Не удалось сохранить маршрут:", error);
+        });
+    },
+    [currentExpeditionId],
+  );
 
   // Счётчики копятся в памяти и раз в 20 секунд уходят одной строкой в журнал,
   // чтобы не писать в IndexedDB на каждую точку GPS.
@@ -182,22 +203,40 @@ function App() {
     };
   }, []);
 
-  const selectExpedition = (expedition) => {
-    setCurrentExpeditionId(expedition.id);
-    setRoute(expedition.path || []);
-    setIsFollowEnabled(true);
+  const selectExpedition = async (expedition) => {
+    // Если сейчас идёт запись, сначала фиксируем её маршрут в базе: пустой
+    // или устаревший state не должен попасть в сохранённую прогулку.
+    persistRoute();
 
-    db.findings
+    // В state путь обновляется раз в 20 секунд, поэтому открываем свежую
+    // запись из базы. Активную прогулку показываем в режиме записи — иначе
+    // из архива нельзя вернуться к ней, а «просмотр» гасил трекинг.
+    const fresh = (await db.expeditions.get(expedition.id)) ?? expedition;
+    const isActive = !fresh.endTime;
+
+    const selectedFindings = await db.findings
       .where("expeditionId")
-      .equals(expedition.id)
-      .toArray()
-      .then((filteredFindings) => {
-        setFindings(filteredFindings);
-      });
+      .equals(fresh.id)
+      .toArray();
 
+    setCurrentExpeditionId(fresh.id);
+    setRoute(fresh.path || []);
+    setFindings(selectedFindings);
+    setIsFollowEnabled(true);
+    setIsWalking(isActive);
+    setIsPaused(isActive && Boolean(fresh.pausedAt));
     setView("map");
-    setIsWalking(false);
-    setIsPaused(false);
+
+    setExpeditions((prevExpeditions) =>
+      prevExpeditions.map((item) =>
+        item.id === fresh.id ? { ...item, path: fresh.path ?? item.path } : item,
+      ),
+    );
+
+    if (isActive) {
+      lastAppendAtRef.current = 0;
+      logDiagnostic("expedition-open-active", { expeditionId: fresh.id });
+    }
   };
 
   const openSummary = (expeditionId) => {
@@ -261,22 +300,23 @@ function App() {
     );
 
     if (activeExpedition) {
+      const active = (await db.expeditions.get(activeExpedition.id)) ?? activeExpedition;
       const activeFindings = await db.findings
         .where("expeditionId")
-        .equals(activeExpedition.id)
+        .equals(active.id)
         .toArray();
 
-      setCurrentExpeditionId(activeExpedition.id);
-      setRoute(activeExpedition.path || []);
+      setCurrentExpeditionId(active.id);
+      setRoute(active.path || []);
       setFindings(activeFindings);
       setIsWalking(true);
-      setIsPaused(Boolean(activeExpedition.pausedAt));
+      setIsPaused(Boolean(active.pausedAt));
       setIsFollowEnabled(true);
       setIsStartModalOpen(false);
       setView("map");
       lastAppendAtRef.current = 0;
       logDiagnostic("expedition-start", {
-        expeditionId: activeExpedition.id,
+        expeditionId: active.id,
         resumed: true,
       });
       return;
@@ -315,10 +355,18 @@ function App() {
   };
 
   // Старт с карты: либо продолжаем активную экспедицию, либо заводим новую.
-  const startWalk = () => {
-    if (currentExpeditionId) {
+  const startWalk = async () => {
+    const current = expeditions.find(
+      (expedition) => expedition.id === currentExpeditionId,
+    );
+
+    // Продолжаем только незавершённую. Если сейчас открыт архивный маршрут,
+    // «Начать» должно завести новую прогулку, а не писать точки в старую.
+    if (current && !current.endTime) {
+      const fresh = (await db.expeditions.get(current.id)) ?? current;
+      setRoute(fresh.path || []);
       setIsWalking(true);
-      setIsPaused(false);
+      setIsPaused(Boolean(fresh.pausedAt));
       setIsFollowEnabled(true);
       return;
     }
@@ -419,6 +467,8 @@ function App() {
 
     await db.expeditions.update(expeditionId, { endTime: null, pausedAt: null });
 
+    const fresh = (await db.expeditions.get(expeditionId)) ?? expedition;
+
     setExpeditions((prevExpeditions) =>
       prevExpeditions.map((item) =>
         item.id === expeditionId ? { ...item, endTime: null, pausedAt: null } : item,
@@ -431,7 +481,7 @@ function App() {
       .toArray();
 
     setCurrentExpeditionId(expeditionId);
-    setRoute(expedition.path || []);
+    setRoute(fresh.path || []);
     setFindings(resumedFindings);
     setIsWalking(true);
     setIsPaused(false);
@@ -491,6 +541,21 @@ function App() {
     };
 
     try {
+      // В экспедиции одна цель: новая цель снимает флаг с предыдущей,
+      // иначе на карте появляются два «цель найдена» (так и вышло 22.11).
+      if (isGoal && currentExpeditionId) {
+        await db.findings
+          .where("expeditionId")
+          .equals(currentExpeditionId)
+          .modify({ isGoal: false });
+
+        const clearGoal = (item) =>
+          item.isGoal ? { ...item, isGoal: false } : item;
+
+        setFindings((prev) => prev.map(clearGoal));
+        setAllFindingsInDB((prev) => prev.map(clearGoal));
+      }
+
       // Dexie возвращает ключ записи — без него у находки в state нет id,
       // из-за чего ломаются React-ключи и удаление.
       const findingId = await db.findings.add(newFinding);
@@ -668,9 +733,6 @@ function App() {
     reader.readAsText(file);
   };
 
-  const routeRef = useRef(route);
-  const lastRouteSaveRef = useRef(0);
-
   useEffect(() => {
     routeRef.current = route;
   }, [route]);
@@ -689,7 +751,7 @@ function App() {
   // на длинной прогулке это O(n²) по объёму записи и лишняя нагрузка на IndexedDB.
   // Теперь пишем не чаще раза в ROUTE_SAVE_INTERVAL_MS.
   useEffect(() => {
-    if (route.length === 0 || !currentExpeditionId) {
+    if (!canPersistRoute(route) || !currentExpeditionId) {
       return;
     }
 
@@ -698,7 +760,22 @@ function App() {
     }
 
     lastRouteSaveRef.current = Date.now();
-    db.expeditions.update(currentExpeditionId, { path: route });
+
+    db.expeditions
+      .update(currentExpeditionId, { path: route })
+      .catch((error) => {
+        console.error("Не удалось сохранить маршрут:", error);
+      });
+
+    // Архив и отчёт берут путь из этого state — держим его свежим, иначе
+    // открытая из архива активная прогулка показывалась без линии.
+    setExpeditions((prevExpeditions) =>
+      prevExpeditions.map((expedition) =>
+        expedition.id === currentExpeditionId
+          ? { ...expedition, path: route }
+          : expedition,
+      ),
+    );
   }, [route, currentExpeditionId]);
 
   // Страховка: при уходе страницы в фон или закрытии вкладки сохраняем маршрут
@@ -706,10 +783,6 @@ function App() {
   useEffect(() => {
     if (!currentExpeditionId) {
       return;
-    }
-
-    function persistRoute() {
-      db.expeditions.update(currentExpeditionId, { path: routeRef.current });
     }
 
     function handleVisibilityChange() {
@@ -725,7 +798,7 @@ function App() {
       window.removeEventListener("pagehide", persistRoute);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [currentExpeditionId]);
+  }, [currentExpeditionId, persistRoute]);
 
   useEffect(() => {
     if (!navigator.geolocation) {

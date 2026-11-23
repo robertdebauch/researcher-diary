@@ -46,9 +46,11 @@ function buildCartoTileUrl(showLabels) {
 // потому что Leaflet не умеет читать CSS-переменные в атрибутах SVG.
 const BREAK_COLOR = "#8a8a8a";
 
-// Причина разрыва: пауза по кнопке, выключенный экран или закрытое приложение.
+// Причина разрыва: пауза по кнопке, продолжение после остановки, выключенный
+// экран или закрытое приложение.
 const GAP_REASON_LABELS = {
   pause: "Пауза",
+  resumed: "Продолжение после остановки",
   "app-closed": "Приложение было закрыто",
   "screen-off": "Экран был выключен",
   unknown: "Нет данных",
@@ -63,9 +65,19 @@ const BREAK_ICON = L.divIcon({
 
 /** Подпись разрыва: «Пауза · 12 мин · 14:20–14:32» или «Экран был выключен · 1 ч 12 мин». */
 function describeBreak(routeBreak, diagnostics) {
+  const detected = getGapReason(
+    routeBreak.from[2],
+    routeBreak.to[2],
+    diagnostics,
+  );
+
+  // Флаг в точке ставит и пауза, и продолжение после «Остановить» — различаем
+  // по журналу, чтобы не называть паузой то, чего человек не делал.
   const reason = routeBreak.isPause
-    ? "pause"
-    : getGapReason(routeBreak.from[2], routeBreak.to[2], diagnostics);
+    ? detected === "resumed"
+      ? "resumed"
+      : "pause"
+    : detected;
 
   const label = GAP_REASON_LABELS[reason] ?? GAP_REASON_LABELS.unknown;
   const duration = formatGapDuration(routeBreak.durationMs);
@@ -131,58 +143,16 @@ function MapCamera({
   return null;
 }
 
-function MapView({
-  currentExpeditionId,
-  position,
-  route,
-  findings,
-  diagnostics,
-  isWalking,
-  isPaused,
-  onStart,
-  onPause,
-  onResume,
-  onFinish,
-  addFinding,
-  isLogOpen,
-  setIsLogOpen,
-  isFollowEnabled,
-  onToggleFollow,
-  onFollowDisabled,
-  goBackToArchive,
-}) {
-  const mapRef = useRef(null);
-  const clusterGroupRef = useRef(null);
-  // Подписи на карте выключены по умолчанию: чистая карта для исследования.
-  const [showLabels, setShowLabels] = useState(false);
-
-  // Прогоны одинакового режима: пешком и транспорт рисуются разным цветом.
-  const routeRuns = useMemo(
-    () =>
-      splitRouteIntoRuns(route)
-        .map((run) => ({
-          mode: run.mode,
-          points: simplifyPath(filterImplausiblePoints(run.points)),
-        }))
-        .filter((run) => run.points.length > 1),
-    [route],
-  );
-
-  // Разрывы: ручная пауза (флаг в точке) или потеря данных (разрыв по времени).
-  const routeBreaks = useMemo(() => getRouteBreaks(route), [route]);
+/**
+ * Маркеры находок живут внутри карты: эффект получает готовый `map` через
+ * `useMap` и перерисовывается, как только карта смонтировалась. Раньше эффект
+ * висел в MapView и мог отработать до появления карты — тогда превью не
+ * появлялись до повторного захода в архив.
+ */
+function FindingsLayer({ findings }) {
+  const map = useMap();
 
   useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    // Кластер-группа лежит на карте как LayerGroup, а не как Marker,
-    // поэтому старый слой нужно снимать явно — иначе каждый новый набор
-    // находок добавляет ещё один слой, и маркеры дублируются.
-    if (clusterGroupRef.current) {
-      map.removeLayer(clusterGroupRef.current);
-      clusterGroupRef.current = null;
-    }
-
     const clusterGroup = L.markerClusterGroup({
       maxClusterRadius: 0,
       spiderfyOnMaxZoom: true,
@@ -199,7 +169,19 @@ function MapView({
         iconAnchor: [size / 2, size / 2],
       });
 
+    // Один слой на набор находок: дубликаты по id не рисуем даже если state
+    // на мгновение содержит одну и ту же находку дважды.
+    const seen = new Set();
+
     findings.forEach((finding) => {
+      const key = finding.id ?? `${finding.position[0]}:${finding.position[1]}`;
+
+      if (seen.has(key)) {
+        return;
+      }
+
+      seen.add(key);
+
       const baseSize = finding.isGoal ? 54 : 44;
 
       const marker = L.marker(finding.position, {
@@ -232,16 +214,54 @@ function MapView({
       clusterGroup.addLayer(marker);
     });
 
-    clusterGroupRef.current = clusterGroup;
     map.addLayer(clusterGroup);
 
     return () => {
-      if (clusterGroupRef.current) {
-        map.removeLayer(clusterGroupRef.current);
-        clusterGroupRef.current = null;
-      }
+      map.removeLayer(clusterGroup);
     };
-  }, [findings]);
+  }, [map, findings]);
+
+  return null;
+}
+
+function MapView({
+  currentExpeditionId,
+  position,
+  route,
+  findings,
+  diagnostics,
+  isWalking,
+  isPaused,
+  onStart,
+  onPause,
+  onResume,
+  onFinish,
+  addFinding,
+  isLogOpen,
+  setIsLogOpen,
+  isFollowEnabled,
+  onToggleFollow,
+  onFollowDisabled,
+  goBackToArchive,
+}) {
+  const mapRef = useRef(null);
+  // Подписи на карте выключены по умолчанию: чистая карта для исследования.
+  const [showLabels, setShowLabels] = useState(false);
+
+  // Прогоны одинакового режима: пешком и транспорт рисуются разным цветом.
+  const routeRuns = useMemo(
+    () =>
+      splitRouteIntoRuns(route)
+        .map((run) => ({
+          mode: run.mode,
+          points: simplifyPath(filterImplausiblePoints(run.points)),
+        }))
+        .filter((run) => run.points.length > 1),
+    [route],
+  );
+
+  // Разрывы: ручная пауза (флаг в точке) или потеря данных (разрыв по времени).
+  const routeBreaks = useMemo(() => getRouteBreaks(route), [route]);
 
   return (
     <>
@@ -329,6 +349,8 @@ function MapView({
               </Marker>
             </Fragment>
           ))}
+          <FindingsLayer findings={findings} />
+
           <MapCamera
             position={position}
             route={route}
