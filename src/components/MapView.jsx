@@ -113,7 +113,13 @@ function MapCamera({
   // Просмотр архива: показываем весь маршрут один раз при открытии экспедиции,
   // дальше карта принадлежит пользователю (раньше fitBounds дёргался каждые 5 секунд).
   useEffect(() => {
-    if (isWalking || !currentExpeditionId) {
+    if (isWalking) {
+      // Вернулись к записи: при следующем открытии архива снова покажем весь путь.
+      fittedExpeditionRef.current = null;
+      return;
+    }
+
+    if (!currentExpeditionId) {
       return;
     }
 
@@ -250,6 +256,8 @@ function MapView({
   diagnostics,
   isWalking,
   isPaused,
+  hasActiveRecording,
+  onReturnToActive,
   onStart,
   onPause,
   onResume,
@@ -418,7 +426,25 @@ function MapView({
             </button>
           </div>
         ) : currentExpeditionId ? (
-          <span className="map-chip map-chip--muted">Просмотр</span>
+          <div className="map-actions">
+            <span className="map-chip map-chip--muted">Просмотр</span>
+            {hasActiveRecording ? (
+              <button
+                className="map-chip map-chip--rec"
+                onClick={onReturnToActive}
+              >
+                ● {isPaused ? "на паузе" : "запись"} · к активной
+              </button>
+            ) : (
+              <button className="map-chip" onClick={onStart}>
+                Начать прогулку
+              </button>
+            )}
+          </div>
+        ) : hasActiveRecording ? (
+          <button className="map-chip map-chip--rec" onClick={onReturnToActive}>
+            ● вернуться к прогулке
+          </button>
         ) : (
           <button className="map-chip" onClick={onStart}>
             Начать прогулку

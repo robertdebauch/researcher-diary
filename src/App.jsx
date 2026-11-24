@@ -37,6 +37,9 @@ function App() {
   const [findings, setFindings] = useState([]);
   const [allFindingsInDB, setAllFindingsInDB] = useState([]);
   const [currentExpeditionId, setCurrentExpeditionId] = useState(null);
+  // Что показываем на карте, если это не активная прогулка: снимок завершённой.
+  // Запись при этом продолжается в active-состоянии выше.
+  const [viewedExpedition, setViewedExpedition] = useState(null);
   const [isLogOpen, setIsLogOpen] = useState(false);
   const [isAddingFinding, setIsAddingFinding] = useState(false);
   const [findingName, setFindingName] = useState("");
@@ -56,6 +59,13 @@ function App() {
   // Автопрокрутка карты за пользователем. Живёт в App, чтобы сбрасываться
   // в момент старта/открытия экспедиции, а не в эффекте MapView.
   const [isFollowEnabled, setIsFollowEnabled] = useState(true);
+
+  // Карта показывает либо активную прогулку, либо снимок завершённой.
+  const displayedExpeditionId =
+    viewedExpedition?.id ?? currentExpeditionId;
+  const displayedRoute = viewedExpedition?.route ?? route;
+  const displayedFindings = viewedExpedition?.findings ?? findings;
+  const isViewingActiveWalk = isWalking && !viewedExpedition;
 
   const disableFollow = useCallback(() => setIsFollowEnabled(false), []);
   const toggleFollow = useCallback(
@@ -164,6 +174,7 @@ function App() {
         // Пауза живёт в базе: если закрыли приложение на паузе — так и восстановим.
         setIsPaused(Boolean(activeExpedition.pausedAt));
         setIsFollowEnabled(true);
+        setViewedExpedition(null);
         setView("map");
 
         const activeFindings = await db.findings
@@ -215,23 +226,12 @@ function App() {
     persistRoute();
 
     // В state путь обновляется раз в 20 секунд, поэтому открываем свежую
-    // запись из базы. Активную прогулку показываем в режиме записи — иначе
-    // из архива нельзя вернуться к ней, а «просмотр» гасил трекинг.
+    // запись из базы.
     const fresh = (await db.expeditions.get(expedition.id)) ?? expedition;
-    const isActive = !fresh.endTime;
-
     const selectedFindings = await db.findings
       .where("expeditionId")
       .equals(fresh.id)
       .toArray();
-
-    setCurrentExpeditionId(fresh.id);
-    setRoute(fresh.path || []);
-    setFindings(selectedFindings);
-    setIsFollowEnabled(true);
-    setIsWalking(isActive);
-    setIsPaused(isActive && Boolean(fresh.pausedAt));
-    setView("map");
 
     setExpeditions((prevExpeditions) =>
       prevExpeditions.map((item) =>
@@ -239,10 +239,38 @@ function App() {
       ),
     );
 
-    if (isActive) {
+    setIsLogOpen(false);
+    setView("map");
+
+    // Возврат к активной записи из просмотра.
+    if (fresh.id === currentExpeditionId) {
+      setViewedExpedition(null);
+      setIsFollowEnabled(true);
+      return;
+    }
+
+    // Активная, но не текущая (аномалия после импорта/старого состояния) —
+    // принимаем её как запись, чтобы не потерять точки.
+    if (!fresh.endTime) {
+      setCurrentExpeditionId(fresh.id);
+      setRoute(fresh.path || []);
+      setFindings(selectedFindings);
+      setIsWalking(true);
+      setIsPaused(Boolean(fresh.pausedAt));
+      setIsFollowEnabled(true);
+      setViewedExpedition(null);
       lastAppendAtRef.current = 0;
       logDiagnostic("expedition-open-active", { expeditionId: fresh.id });
+      return;
     }
+
+    // Завершённая — только показываем. Запись (если идёт) не останавливаем.
+    setViewedExpedition({
+      id: fresh.id,
+      route: fresh.path || [],
+      findings: selectedFindings,
+    });
+    setIsFollowEnabled(false);
   };
 
   const openSummary = (expeditionId) => {
@@ -312,12 +340,19 @@ function App() {
         .equals(active.id)
         .toArray();
 
+      // Если это та же запись, что уже идёт, путь в state свежее базы
+      // (сохранение раз в 20 секунд) — не откатываем последние точки.
+      const activeRoute =
+        active.id === currentExpeditionId ? route : active.path || [];
+
       setCurrentExpeditionId(active.id);
-      setRoute(active.path || []);
+      setRoute(activeRoute);
       setFindings(activeFindings);
       setIsWalking(true);
       setIsPaused(Boolean(active.pausedAt));
       setIsFollowEnabled(true);
+      setViewedExpedition(null);
+      setIsLogOpen(false);
       setIsStartModalOpen(false);
       setView("map");
       lastAppendAtRef.current = 0;
@@ -352,6 +387,8 @@ function App() {
     setIsWalking(true);
     setIsPaused(false);
     setIsFollowEnabled(true);
+    setViewedExpedition(null);
+    setIsLogOpen(false);
     setIsStartModalOpen(false);
     setExpeditionTitle("");
     setExpeditionGoal("");
@@ -361,7 +398,7 @@ function App() {
   };
 
   // Старт с карты: либо продолжаем активную экспедицию, либо заводим новую.
-  const startWalk = async () => {
+  const startWalk = () => {
     const current = expeditions.find(
       (expedition) => expedition.id === currentExpeditionId,
     );
@@ -369,11 +406,13 @@ function App() {
     // Продолжаем только незавершённую. Если сейчас открыт архивный маршрут,
     // «Начать» должно завести новую прогулку, а не писать точки в старую.
     if (current && !current.endTime) {
-      const fresh = (await db.expeditions.get(current.id)) ?? current;
-      setRoute(fresh.path || []);
+      // Путь уже в state — не перечитываем из базы, чтобы не потерять
+      // последние 20 секунд, ещё не сохранённые троттлингом.
       setIsWalking(true);
-      setIsPaused(Boolean(fresh.pausedAt));
+      setIsPaused(Boolean(current.pausedAt));
       setIsFollowEnabled(true);
+      setViewedExpedition(null);
+      setIsLogOpen(false);
       return;
     }
 
@@ -432,19 +471,23 @@ function App() {
   };
 
   const finishWalk = async () => {
-    if (currentExpeditionId) {
+    const finishedId = currentExpeditionId;
+    const finishedRoute = route;
+    const finishedFindings = findings;
+
+    if (finishedId) {
       const endTime = new Date();
 
-      await db.expeditions.update(currentExpeditionId, {
+      await db.expeditions.update(finishedId, {
         endTime,
-        path: route,
+        path: finishedRoute,
         pausedAt: null,
       });
 
       setExpeditions((prevExpeditions) =>
         prevExpeditions.map((expedition) =>
-          expedition.id === currentExpeditionId
-            ? { ...expedition, endTime, path: route, pausedAt: null }
+          expedition.id === finishedId
+            ? { ...expedition, endTime, path: finishedRoute, pausedAt: null }
             : expedition,
         ),
       );
@@ -456,10 +499,22 @@ function App() {
     lastAppendAtRef.current = 0;
     flushDiagnostics(true);
     logDiagnostic("finish", {
-      expeditionId: currentExpeditionId,
-      points: route.length,
+      expeditionId: finishedId,
+      points: finishedRoute.length,
     });
-    setCurrentExpeditionId(null);
+
+    // После «Остановить» карта остаётся на завершённой прогулке, но это уже
+    // просмотр: запись выключена, активного id нет.
+    if (finishedId) {
+      setViewedExpedition({
+        id: finishedId,
+        route: finishedRoute,
+        findings: finishedFindings,
+      });
+      setCurrentExpeditionId(null);
+      setRoute([]);
+      setFindings([]);
+    }
   };
 
   // Продолжить завершённую: снимаем endTime, трекинг включается, линия
@@ -468,6 +523,13 @@ function App() {
     const expedition = expeditions.find((item) => item.id === expeditionId);
 
     if (!expedition || !isResumableExpedition(expedition, expeditions)) {
+      return;
+    }
+
+    // Две записи одновременно не ведём: пока активная не остановлена,
+    // «Продолжить» для завершённой недоступно.
+    if (currentExpeditionId) {
+      notify("Сначала остановите текущую прогулку", { tone: "error" });
       return;
     }
 
@@ -492,6 +554,8 @@ function App() {
     setIsWalking(true);
     setIsPaused(false);
     setIsFollowEnabled(true);
+    setViewedExpedition(null);
+    setIsLogOpen(false);
     setIsLogOpen(false);
     setView("map");
 
@@ -597,9 +661,18 @@ function App() {
     try {
       await db.findings.delete(findingId);
 
-      // Обновляем стейты, чтобы находка мгновенно исчезла с экрана
+      // Обновляем стейты, чтобы находка мгновенно исчезла с экрана.
+      // Просматриваемая экспедиция может быть не активной — чистим и её снимок.
       setFindings((prev) => prev.filter((f) => f.id !== findingId));
       setAllFindingsInDB((prev) => prev.filter((f) => f.id !== findingId));
+      setViewedExpedition((prev) =>
+        prev
+          ? {
+              ...prev,
+              findings: prev.findings.filter((f) => f.id !== findingId),
+            }
+          : prev,
+      );
 
       notify("Находка удалена");
     } catch (error) {
@@ -663,6 +736,11 @@ function App() {
       pendingBreakRef.current = false;
     }
 
+    // Если удалили именно то, что сейчас на карте, показывать больше нечего.
+    if (viewedExpedition?.id === expeditionId) {
+      setViewedExpedition(null);
+    }
+
     setSummaryExpeditionId(null);
     setView("archive");
   };
@@ -688,6 +766,7 @@ function App() {
       setCurrentExpeditionId(null);
       setIsWalking(false);
       setIsPaused(false);
+      setViewedExpedition(null);
       setView("archive");
 
       notify("Все данные удалены");
@@ -722,6 +801,18 @@ function App() {
   const handleClearDebug = async () => {
     try {
       await removeDebugData();
+
+      // Если на карте был открыт тестовый маршрут, показывать больше нечего.
+      if (viewedExpedition) {
+        const viewedRow = expeditions.find(
+          (expedition) => expedition.id === viewedExpedition.id,
+        );
+
+        if (viewedRow?.isDebug) {
+          setViewedExpedition(null);
+        }
+      }
+
       await refreshExpeditions();
       notify("Тестовые прогулки удалены");
     } catch (error) {
@@ -924,11 +1015,11 @@ function App() {
   const summaryExpedition = expeditions.find(
     (expedition) => expedition.id === summaryExpeditionId,
   );
-  // Кнопка «Продолжить» — только у последней и недавно завершённой прогулки.
-  const canResumeSummary = isResumableExpedition(
-    summaryExpedition,
-    expeditions,
-  );
+  // Кнопка «Продолжить» — только у последней и недавно завершённой прогулки,
+  // и только если сейчас нет активной записи.
+  const canResumeSummary =
+    !currentExpeditionId &&
+    isResumableExpedition(summaryExpedition, expeditions);
 
   return (
     <div className="app-container">
@@ -962,13 +1053,19 @@ function App() {
           {" "}
           {/* 2. Этот класс ТОЛЬКО для режима карты */}
           <MapView
-            currentExpeditionId={currentExpeditionId}
+            currentExpeditionId={displayedExpeditionId}
             position={position}
-            route={route}
-            findings={findings}
+            route={displayedRoute}
+            findings={displayedFindings}
             diagnostics={diagnostics}
-            isWalking={isWalking}
+            isWalking={isViewingActiveWalk}
             isPaused={isPaused}
+            hasActiveRecording={Boolean(currentExpeditionId)}
+            onReturnToActive={() => {
+              setViewedExpedition(null);
+              setIsFollowEnabled(true);
+              setIsLogOpen(false);
+            }}
             onStart={startWalk}
             onPause={pauseWalk}
             onResume={resumeWalk}
@@ -983,7 +1080,7 @@ function App() {
           />
           <FindingsLog
             isOpen={isLogOpen}
-            findings={findings}
+            findings={displayedFindings}
             onClose={() => setIsLogOpen(false)}
             onDeleteFinding={deleteFinding}
           />

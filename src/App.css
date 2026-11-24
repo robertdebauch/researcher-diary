@@ -566,6 +566,10 @@ button {
   color: var(--ink-muted);
 }
 
+.map-chip--rec {
+  color: var(--accent);
+}
+
 .map-status {
   margin-top: 8px;
   font-family: var(--font-mono);
