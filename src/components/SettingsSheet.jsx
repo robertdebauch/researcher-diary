@@ -9,8 +9,15 @@ import {
   saveApiKey,
   saveConsent,
 } from "../recognition";
+import { DEBUG_LIMIT } from "../debugSeed";
 
-function SettingsSheet({ isOpen, onClose }) {
+function SettingsSheet({
+  isOpen,
+  onClose,
+  debugCount = 0,
+  onSeedDebug,
+  onClearDebug,
+}) {
   const [draftKey, setDraftKey] = useState("");
   const [savedKey, setSavedKey] = useState("");
   const [consent, setConsent] = useState(false);
@@ -189,6 +196,36 @@ function SettingsSheet({ isOpen, onClose }) {
             Забыть ключ
           </button>
         )}
+
+        <section className="section">
+          <p className="section__label">Диагностика</p>
+          <p className="recognition__hint">
+            Тестовые строки для проверки архива на большом списке. Живут до
+            перезапуска приложения и в экспорт не попадают.
+          </p>
+          <div className="recognition__actions">
+            <button
+              className="btn btn--muted"
+              onClick={onSeedDebug}
+              disabled={debugCount >= DEBUG_LIMIT}
+            >
+              +25 тестовых
+            </button>
+            <button
+              className="btn btn--muted"
+              onClick={onClearDebug}
+              disabled={debugCount === 0}
+            >
+              Удалить тестовые
+            </button>
+          </div>
+          <div className="recognition__row">
+            <span className="section__label">Тестовых</span>
+            <span className="recognition__meta">
+              {debugCount} из {DEBUG_LIMIT}
+            </span>
+          </div>
+        </section>
 
         <div className="sheet__actions">
           <button className="btn btn--accent" onClick={onClose}>

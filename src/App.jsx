@@ -15,6 +15,11 @@ import "./App.css";
 import { db, clearAllData, exportAllData, importAllData } from "./db";
 import { logDiagnostic } from "./diagnostics";
 import {
+  loadExpeditionsWithoutDebug,
+  removeDebugData,
+  seedDebugData,
+} from "./debugStore";
+import {
   compressImage,
   appendRoutePoint,
   canPersistRoute,
@@ -47,6 +52,7 @@ function App() {
   const [isGoal, setIsGoal] = useState(false);
   const [summaryExpeditionId, setSummaryExpeditionId] = useState(null);
   const [diagnostics, setDiagnostics] = useState([]);
+  const [debugCount, setDebugCount] = useState(0);
   // Автопрокрутка карты за пользователем. Живёт в App, чтобы сбрасываться
   // в момент старта/открытия экспедиции, а не в эффекте MapView.
   const [isFollowEnabled, setIsFollowEnabled] = useState(true);
@@ -140,11 +146,11 @@ function App() {
 
   useEffect(() => {
     async function loadData() {
-      const allExpeditions = await db.expeditions
-        .orderBy("id")
-        .reverse()
-        .toArray();
+      // Тестовые строки живут только до перезапуска: читаем архив один раз,
+      // попутно удаляя их, чтобы UI никогда не показывал фейковые прогулки.
+      const allExpeditions = await loadExpeditionsWithoutDebug();
       setExpeditions(allExpeditions);
+      setDebugCount(0);
 
       const allFindings = await db.findings.toArray();
       setAllFindingsInDB(allFindings);
@@ -691,6 +697,39 @@ function App() {
     }
   };
 
+  const refreshExpeditions = async () => {
+    const rows = await db.expeditions.orderBy("id").reverse().toArray();
+    setExpeditions(rows);
+    setDebugCount(rows.filter((expedition) => expedition.isDebug).length);
+  };
+
+  const handleSeedDebug = async () => {
+    try {
+      const result = await seedDebugData(25);
+      await refreshExpeditions();
+
+      if (result.added > 0) {
+        notify(`Добавлено тестовых: ${result.added}`);
+      } else {
+        notify("Предел тестовых прогулок — 200", { tone: "error" });
+      }
+    } catch (error) {
+      console.error("Не удалось добавить тестовые прогулки:", error);
+      notify("Не удалось добавить тестовые прогулки", { tone: "error" });
+    }
+  };
+
+  const handleClearDebug = async () => {
+    try {
+      await removeDebugData();
+      await refreshExpeditions();
+      notify("Тестовые прогулки удалены");
+    } catch (error) {
+      console.error("Не удалось удалить тестовые прогулки:", error);
+      notify("Не удалось удалить тестовые прогулки", { tone: "error" });
+    }
+  };
+
   const handleExport = async () => {
     try {
       const data = await exportAllData();
@@ -977,6 +1016,9 @@ function App() {
       <SettingsSheet
         isOpen={isSettingsOpen}
         onClose={closeSettings}
+        debugCount={debugCount}
+        onSeedDebug={handleSeedDebug}
+        onClearDebug={handleClearDebug}
       />
     </div>
   );

@@ -47,8 +47,14 @@ export async function clearAllData() {
 }
 
 export async function exportAllData() {
-  const expeditions = await db.expeditions.toArray();
-  const findings = await db.findings.toArray();
+  // Тестовые строки (isDebug) в бэкап не попадают: полевые JSON должны
+  // оставаться чистыми и дешёвыми для разбора.
+  const expeditions = (await db.expeditions.toArray()).filter(
+    (row) => row.isDebug !== true,
+  );
+  const findings = (await db.findings.toArray()).filter(
+    (row) => row.isDebug !== true,
+  );
   const diagnostics = await db.diagnostics.toArray();
 
   return {

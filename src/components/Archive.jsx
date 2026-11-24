@@ -20,6 +20,30 @@ function Archive({
       minute: "2-digit",
     });
 
+  const formatStartClock = (value) =>
+    new Date(value).toLocaleTimeString("ru-RU", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+
+  const findingsFor = (expedition) =>
+    allFindings.filter((finding) => finding.expeditionId === expedition.id);
+
+  // Активная прогулка живёт отдельным блоком «Сейчас»: её нельзя потерять
+  // среди завершённых, и она всегда доступна для продолжения.
+  const activeExpedition = expeditions.find(
+    (expedition) => !expedition.endTime,
+  );
+  const activeFindings = activeExpedition
+    ? findingsFor(activeExpedition)
+    : [];
+  const pastExpeditions = activeExpedition
+    ? expeditions.filter((expedition) => expedition.id !== activeExpedition.id)
+    : expeditions;
+  const activeMeta = activeExpedition
+    ? `${activeExpedition.pausedAt ? "на паузе" : "запись"} · с ${formatStartClock(activeExpedition.startTime)}`
+    : "";
+
   return (
     <div className="list-view">
       <header>
@@ -32,18 +56,55 @@ function Archive({
         <span aria-hidden="true">+</span>
       </button>
 
-      <section className="section">
-        <p className="section__label">Экспедиции · {expeditions.length}</p>
+      {activeExpedition && (
+        <section className="section section--now">
+          <p className="section__label">Сейчас</p>
 
-        {expeditions.length === 0 ? (
+          <div className="row row--active">
+            <button
+              className="row__main"
+              onClick={() => onSelect(activeExpedition)}
+            >
+              <span className="row__thumb row__thumb--rec" aria-hidden="true">
+                <span className="rec-dot" />
+              </span>
+
+              <span className="row__body">
+                <span className="row__title">{activeExpedition.title}</span>
+                <span className="row__goal">«{activeExpedition.goal}»</span>
+                <span className="row__meta">{activeMeta}</span>
+              </span>
+            </button>
+
+            <div className="row__aside">
+              <span
+                className={`row__count ${activeFindings.length > 0 ? "" : "row__count--empty"}`}
+              >
+                {formatFindingsCount(activeFindings.length)}
+              </span>
+              <button
+                className="btn"
+                onClick={() => onSelect(activeExpedition)}
+              >
+                {activeExpedition.pausedAt ? "Открыть" : "Продолжить"}
+              </button>
+            </div>
+          </div>
+        </section>
+      )}
+
+      <section className="section">
+        <p className="section__label">Экспедиции · {pastExpeditions.length}</p>
+
+        {pastExpeditions.length === 0 ? (
           <p className="empty-state">
-            Пока ни одной прогулки. Начните с первой.
+            {activeExpedition
+              ? "Завершённых прогулок пока нет."
+              : "Пока ни одной прогулки. Начните с первой."}
           </p>
         ) : (
-          expeditions.map((expedition) => {
-            const expeditionFindings = allFindings.filter(
-              (finding) => finding.expeditionId === expedition.id,
-            );
+          pastExpeditions.map((expedition) => {
+            const expeditionFindings = findingsFor(expedition);
             const goalFinding = expeditionFindings.find(
               (finding) => finding.isGoal && finding.image,
             );

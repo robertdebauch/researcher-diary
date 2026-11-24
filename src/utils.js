@@ -36,6 +36,10 @@ export const TRANSPORT_SPEED_KMPH = 12;
 // а не перемещение. Заодно уменьшает «пилу» на линии.
 const MIN_POINT_DISTANCE_METERS = 3;
 
+// Связку между разорванными точками рисуем, только если между ними реально
+// было перемещение: иначе это шум на месте.
+const MIN_GAP_LINK_METERS = 15;
+
 // Точки с погрешностью больше этого значения не пишем в маршрут (дома, начало трека).
 export const MAX_ACCURACY_METERS = 30;
 
@@ -372,6 +376,59 @@ export function splitRouteIntoRuns(path) {
 
     return isSustained ? run : { mode: "walk", points: run.points };
   });
+}
+
+/**
+ * Связки между точками разрыва: непрерывность маршрута для ориентирования.
+ * Геометрия — прямая между A и B (точного пути мы не знаем), поэтому на карте
+ * такие отрезки рисуются пунктиром. Режим определяется по средней скорости,
+ * ручная пауза помечается отдельно.
+ */
+export function getGapConnections(path) {
+  if (!path || path.length < 2) {
+    return [];
+  }
+
+  const links = [];
+
+  for (let index = 1; index < path.length; index += 1) {
+    const from = path[index - 1];
+    const to = path[index];
+
+    if (!isSegmentStartPoint(to) && !isTimeGap(from, to)) {
+      continue;
+    }
+
+    const elapsedMs = resolveElapsedMs(from, to);
+
+    if (elapsedMs <= 0) {
+      continue;
+    }
+
+    const distanceMeters = calculateDistance(from, to);
+
+    if (distanceMeters < MIN_GAP_LINK_METERS) {
+      continue;
+    }
+
+    const speedKmph = (distanceMeters * 3600) / elapsedMs;
+
+    // Быстрее пешеходного предела — это сбой GPS, а не перемещение.
+    if (speedKmph > MAX_WALKING_SPEED_KMPH) {
+      continue;
+    }
+
+    links.push({
+      from,
+      to,
+      isPause: isSegmentStartPoint(to),
+      durationMs: elapsedMs,
+      distanceMeters,
+      mode: speedKmph > TRANSPORT_SPEED_KMPH ? "transport" : "walk",
+    });
+  }
+
+  return links;
 }
 
 /**

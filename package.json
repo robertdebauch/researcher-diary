@@ -8,6 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "check:route": "node scripts/route-math-check.mjs",
+    "check:seed": "node scripts/debug-seed-check.mjs",
+    "check": "npm run check:route && npm run check:seed",
     "preview": "vite preview",
     "predeploy": "npm run build",
     "deploy": "gh-pages -d dist"

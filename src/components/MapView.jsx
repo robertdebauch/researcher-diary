@@ -6,6 +6,7 @@ import {
   TileLayer,
   Marker,
   Popup,
+  Tooltip,
   useMap,
   Polyline,
 } from "react-leaflet";
@@ -15,10 +16,10 @@ import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import {
   escapeHtml,
   filterImplausiblePoints,
-  formatBreakTimeRange,
   formatGapDuration,
   getFindingDescription,
   getFindingName,
+  getGapConnections,
   getGapReason,
   getRouteBreaks,
   MAX_BREAK_DASH_METERS,
@@ -50,7 +51,7 @@ const BREAK_COLOR = "#8a8a8a";
 // экран или закрытое приложение.
 const GAP_REASON_LABELS = {
   pause: "Пауза",
-  resumed: "Продолжение после остановки",
+  resumed: "После остановки",
   "app-closed": "Приложение было закрыто",
   "screen-off": "Экран был выключен",
   unknown: "Нет данных",
@@ -63,7 +64,7 @@ const BREAK_ICON = L.divIcon({
   iconAnchor: [5, 5],
 });
 
-/** Подпись разрыва: «Пауза · 12 мин · 14:20–14:32» или «Экран был выключен · 1 ч 12 мин». */
+/** Короткая подпись разрыва: «Экран был выключен · 9 мин · ≈2.5 км». */
 function describeBreak(routeBreak, diagnostics) {
   const detected = getGapReason(
     routeBreak.from[2],
@@ -81,11 +82,12 @@ function describeBreak(routeBreak, diagnostics) {
 
   const label = GAP_REASON_LABELS[reason] ?? GAP_REASON_LABELS.unknown;
   const duration = formatGapDuration(routeBreak.durationMs);
-  const range = formatBreakTimeRange(routeBreak.from, routeBreak.to);
+  const distance =
+    routeBreak.distanceMeters >= 100
+      ? ` · ≈${(routeBreak.distanceMeters / 1000).toFixed(1)} км`
+      : "";
 
-  return range
-    ? `${label} · ${duration} · ${range}`
-    : `${label} · ${duration}`;
+  return `${label} · ${duration}${distance}`;
 }
 
 function MapCamera({
@@ -224,6 +226,22 @@ function FindingsLayer({ findings }) {
   return null;
 }
 
+/** Тап по карте закрывает подписи разрывов: на телефоне у них нет mouseout. */
+function CloseTooltipsOnMapClick() {
+  const map = useMap();
+
+  useEffect(() => {
+    const closeTooltips = () => map.closeTooltip();
+    map.on("click", closeTooltips);
+
+    return () => {
+      map.off("click", closeTooltips);
+    };
+  }, [map]);
+
+  return null;
+}
+
 function MapView({
   currentExpeditionId,
   position,
@@ -262,6 +280,10 @@ function MapView({
 
   // Разрывы: ручная пауза (флаг в точке) или потеря данных (разрыв по времени).
   const routeBreaks = useMemo(() => getRouteBreaks(route), [route]);
+
+  // Связки между разорванными точками: маршрут остаётся непрерывным для
+  // ориентирования, но пунктир честно говорит «точного пути не знаем».
+  const routeLinks = useMemo(() => getGapConnections(route), [route]);
 
   return (
     <>
@@ -310,6 +332,19 @@ function MapView({
             <Popup>Вы здесь</Popup>
           </Marker>
 
+          {routeLinks.map((link, index) => (
+            <Polyline
+              key={`route-link-${index}`}
+              positions={toLeafletPositions([link.from, link.to])}
+              pathOptions={{
+                className: `route-link route-link--${
+                  link.isPause ? "pause" : link.mode
+                }`,
+                interactive: false,
+              }}
+            />
+          ))}
+
           {routeRuns.map((run, index) => (
             <Polyline
               key={`route-run-${index}`}
@@ -342,14 +377,21 @@ function MapView({
               <Marker
                 position={[routeBreak.to[0], routeBreak.to[1]]}
                 icon={BREAK_ICON}
+                bubblingMouseEvents={false}
               >
-                <Popup className="break-popup">
+                <Tooltip
+                  direction="top"
+                  offset={[0, -6]}
+                  opacity={1}
+                  className="break-tooltip"
+                >
                   {describeBreak(routeBreak, diagnostics)}
-                </Popup>
+                </Tooltip>
               </Marker>
             </Fragment>
           ))}
           <FindingsLayer findings={findings} />
+          <CloseTooltipsOnMapClick />
 
           <MapCamera
             position={position}

@@ -309,6 +309,34 @@ button {
   white-space: nowrap;
 }
 
+/* Активная прогулка: отдельный блок «Сейчас» над архивом. */
+.section--now {
+  margin-top: 24px;
+}
+
+.row--active {
+  border-bottom-color: var(--accent);
+}
+
+.row--active .row__meta {
+  color: var(--accent);
+}
+
+.row__thumb--rec {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid var(--rule);
+}
+
+.rec-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
 .row__goal {
   display: block;
   margin-top: 2px;
@@ -743,13 +771,43 @@ button {
   border-right: 1px solid var(--route-color);
 }
 
-.break-popup .leaflet-popup-content {
-  margin: 8px 10px;
+/* Связки через разрыв: пунктир «перемещение было, точного пути не знаем». */
+.leaflet-overlay-pane path.route-link {
+  stroke-width: 1.5;
+  stroke-opacity: 0.55;
+  stroke-dasharray: 3 6;
+  stroke-linecap: round;
+}
+
+.leaflet-overlay-pane path.route-link--walk {
+  stroke: var(--route-color);
+}
+
+.leaflet-overlay-pane path.route-link--transport {
+  stroke: var(--route-transport);
+}
+
+.leaflet-overlay-pane path.route-link--pause {
+  stroke: var(--route-break);
+}
+
+/* Подпись разрыва: компактная плашка без рамки и крестика. */
+.leaflet-tooltip.break-tooltip {
+  padding: 4px 8px;
+  background: var(--bg-raised);
+  border: 1px solid var(--rule);
+  border-radius: 0;
+  box-shadow: none;
+  color: var(--ink);
   font-family: var(--font-mono);
   font-size: 10px;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--ink);
+  white-space: nowrap;
+}
+
+.leaflet-tooltip-top.break-tooltip::before {
+  border-top-color: var(--rule);
 }
 
 .custom-marker-icon {

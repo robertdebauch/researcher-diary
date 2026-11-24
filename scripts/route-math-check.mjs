@@ -11,6 +11,7 @@ import {
   createRoutePoint,
   filterImplausiblePoints,
   formatGapDuration,
+  getGapConnections,
   getGapReason,
   getRouteBreaks,
   isResumableExpedition,
@@ -531,6 +532,48 @@ check(
     (run) => run.points.length < 2,
   ),
   true,
+);
+
+// 24. Связки между точками разрыва.
+const linkStart = createRoutePoint(58.0089969, 56.225668, startTime);
+const linkEnd = createRoutePoint(
+  57.999234,
+  56.1915505,
+  startTime + 536000,
+);
+const rideLinks = getGapConnections([linkStart, linkEnd]);
+check("связка через разрыв: одна", rideLinks.length, 1);
+check("связка через разрыв: транспорт", rideLinks[0].mode, "transport");
+check(
+  "связка через разрыв: расстояние больше 2 км",
+  rideLinks[0].distanceMeters > 2000,
+  true,
+);
+
+const pauseStart = createRoutePoint(58.0, 56.0, startTime);
+const pauseEnd = createRoutePoint(58.0018, 56.0, startTime + 600000, true);
+const pauseLinks = getGapConnections([pauseStart, pauseEnd]);
+check("связка паузы: одна", pauseLinks.length, 1);
+check("связка паузы: помечена", pauseLinks[0].isPause, true);
+
+const stillEnd = createRoutePoint(58.0, 56.0, startTime + 600000, true);
+check(
+  "стоя на паузе связки нет",
+  getGapConnections([pauseStart, stillEnd]).length,
+  0,
+);
+
+const teleportEnd = createRoutePoint(58.1, 56.0, startTime + 60000);
+check(
+  "телепорт не соединяем",
+  getGapConnections([pauseStart, teleportEnd]).length,
+  0,
+);
+
+check(
+  "без разрыва связок нет",
+  getGapConnections([steadyPoint(0), steadyPoint(1)]).length,
+  0,
 );
 
 console.log(results.join("\n"));
