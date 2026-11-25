@@ -1,64 +1,16 @@
-# Дневник исследователя
+# Researcher's Diary
 
-Приватное PWA для записи прогулок и сбора «находок»: маршрут по GPS, фото с заметкой и координатами, цель прогулки и отчёт после неё. **Все данные хранятся локально в браузере (IndexedDB)** — ни аккаунтов, ни сервера, ни отправки фото куда-либо.
+A local-first PWA for recording walks and collecting small discoveries along the way.
 
-## Что умеет
+During a walk, the app traces your route on a map. When something catches your eye, you can photograph it, add a short note, and keep it as a finding — tied to the place and time where you found it. Each walk has a goal; afterwards the diary shows where you went, what you found, and when. Past walks remain in the archive.
 
-- **Архив** прогулок с превью, счётчиком находок и переходом в отчёт.
-- **Карта** (Leaflet + OpenStreetMap): трекинг позиции каждые 5 сек, линия маршрута, фото-маркеры в кластерах со spiderfy, отдельный золотой маркер для попадания в цель. Пауза и продолжение прогулки; разрывы маршрута помечаются знаком ‖ с подписью «пауза»/«нет данных», короткие соединяются пунктиром.
-- **Находки**: фото с камеры (`capture="environment"`), сжатие до 1200px/JPEG 0.7 с учётом EXIF-ориентации, название и описание, отметка «это была моя цель», журнал находок выезжающей панелью.
-- **Распознавание фото**: кнопка «Распознать» в листе находки, результат заполняет название и описание. Ключ Gemini API вводится в настройках (архив → «Распознавание») и хранится только в IndexedDB на устройстве; перед отправкой фото проверяется доступность API из текущей сети (нужен VPN). Бесплатный лимит — 100 запросов в сутки.
-- **Отчёт**: длительность, дистанция (haversine с фильтром GPS-аномалий), средняя скорость, достигнута ли цель, лента находок.
-- **Надёжность**: восстановление незавершённой прогулки после закрытия вкладки (включая паузу), экспорт/импорт всей базы в JSON, hard reset, сообщения и подтверждения внутри приложения вместо нативных `alert`/`confirm`.
-- **PWA**: манифест, standalone-режим, иконки 192/512, мета-теги для iOS и service worker — оболочка открывается офлайн (тайлы карты требуют сети).
+- Route recording with pause and resume
+- Photo findings with notes, places, and times
+- A goal for each walk and a summary afterwards
+- Archive of previous walks
+- Optional photo recognition with your own API key
+- Installable PWA that works offline (map tiles need a network)
 
-## Стек
+Walks and photos are stored locally in the browser: no accounts, no server, no analytics. Photo recognition is optional and only runs when you ask for it.
 
-React 19, Vite 8, Dexie 4 (IndexedDB), Leaflet 1.9 + react-leaflet 5 + leaflet.markercluster. Карта — тайлы CARTO (`light_nolabels` / `light_all`, атрибуция показывается), при отсутствии ключа — OSM. Стили — обычный CSS (`src/App.css`). Деплой — GitHub Pages (`gh-pages`).
-
-## Запуск
-
-```bash
-npm install
-npm run dev                      # http://localhost:5173/researcher-diary/ (без service worker)
-npm run lint
-npm run check:route              # проверка математики маршрута
-npm run build                    # dist/
-npm run preview -- --port 4173   # проверка сборки вместе с service worker
-npm run deploy                   # публикация на GitHub Pages
-```
-
-Геолокация работает только на `localhost` или HTTPS. В `vite.config.js` `base` должен совпадать с именем репозитория (`/researcher-diary/`). Офлайн проверяется на preview: DevTools → Network → Offline → reload.
-
-## Структура
-
-```
-src/
-  App.jsx                  контроллер режимов (archive/map/summary), сессия, импорт/экспорт
-  db.js                    Dexie: схема, бэкап, транзакционный импорт
-  utils.js                 haversine, дистанция/скорость, сжатие изображений
-  components/
-    Archive.jsx            список экспедиций
-    MapView.jsx            карта, маршрут, маркеры, кнопки управления
-    FindingModal.jsx       фиксация находки
-    FindingsLog.jsx        журнал находок
-    StartExpeditionModal.jsx  старт прогулки
-    SummaryView.jsx        отчёт
-public/                    манифест, иконки
-```
-
-## Данные
-
-Dexie `ExplorerDB`:
-
-- `expeditions`: `++id, startTime, endTime, pausedAt, title, goal, path`
-  - `path` — массив точек `[широта, долгота, время, флагРазрыва, точность]`; флаг `1` — первая точка после паузы, точность в метрах. Старые точки из 2–3 полей читаются как раньше.
-- `findings`: `++id, expeditionId, position, timeStamp, name, description, image (base64), isGoal`
-- `diagnostics`: `++id, time, type` — журнал записи маршрута (старт/пауза/фон/ошибки GPS/счётчики точек). Входит в экспорт JSON начиная с версии 2.
-
-Экспорт — один JSON-файл со всеми экспедициями и находками (включая фото).
-
-## Документация
-
-Внутренние документы проекта — `PROJECT_CONTEXT.md` (замысел и архитектура), `AGENT-RULES.md` (правила работы, проверки, ловушки), `DECISIONS.md` (журнал решений с обоснованиями), `BACKLOG.md` (открытые задачи) — ведутся локально и в репозиторий не входят: это рабочие заметки, а не публичная документация.
-
+Built with React, Leaflet, and IndexedDB. A personal, experimental project.
